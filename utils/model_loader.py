@@ -1,8 +1,8 @@
 import torch
-from clip import CLIP
-from encoder import VAE_Encoder
-from decoder import VAE_Decoder
-from diffusion import Diffusion
+from ..models.clip.clip import CLIP
+from ..models.vae.encoder import VAE_Encoder
+from ..models.vae.decoder import VAE_Decoder
+from ..models.diffusion import Diffusion
 
 def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
@@ -35,7 +35,7 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     }
 
 
-from controlnet import Controlnet, ControlNetConditioningEmbedding
+from ..models.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
 
 def load_controlnet_model(state_dict=None, dtype=torch.float16):
     
@@ -52,7 +52,7 @@ def load_controlnet_model(state_dict=None, dtype=torch.float16):
     }
 
 
-from embedding.color_palette_embedding import ColorPaletteEmbedding, ColorPaletteTimestepEmbedding
+from ..models.embedding.color_palette_embedding import ColorPaletteEmbedding, ColorPaletteTimestepEmbedding
 def load_color_palette_embedding_model(state_dict=None, num_features=119, n_embd=768, n_embd_ts=320, dtype=torch.float16):
     
     colorpalette_model = ColorPaletteEmbedding(num_features, n_embd).to(dtype)

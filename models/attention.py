@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import math
-from lora import get_lora_layers
+from .lora.lora import get_lora_layers
 
 
 class SelfAttention(nn.Module):

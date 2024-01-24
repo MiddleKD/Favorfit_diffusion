@@ -1,7 +1,7 @@
 from torch import nn
 from torch.nn import functional as F
-from ..diffusion import *
-from ..model_utils import zero_module
+from models.diffusion import *
+from models.model_utils import zero_module
 
 
 class ControlNetConditioningEmbedding(nn.Module):

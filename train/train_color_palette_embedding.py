@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.getcwd())
+
 import os
 from tqdm import tqdm
 from accelerate.utils import ProjectConfiguration, set_seed
@@ -108,7 +111,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-from ..models.embedding.extract_features import get_features
 def make_train_dataset(path, tokenizer, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
@@ -129,7 +131,7 @@ def make_train_dataset(path, tokenizer, accelerator):
 
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77).input_ids
 
-        colors = torch.FloatTensor([get_features(cur["total"]) for cur in examples[color_column]])
+        colors = torch.FloatTensor([cur["total"] for cur in examples[color_column]])
         
         examples["pixel_values"] = images
         examples["input_ids"] = tokenized_ids
@@ -153,7 +155,7 @@ def load_models(args):
         from transformers import CLIPTokenizer
         tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
-    from ..utils.model_loader import load_diffusion_model
+    from utils.model_loader import load_diffusion_model
     if args.diffusion_model_path is not None:
         diffusion_state_dict = torch.load(args.diffusion_model_path)
 
@@ -164,19 +166,19 @@ def load_models(args):
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "lora_scale":1.0})
 
     if args.controlnet == True:
-        from ..utils.model_loader import load_controlnet_model
+        from utils.model_loader import load_controlnet_model
         control_state_dict = None
         if args.controlnet_model_path is not None:
             control_state_dict = torch.load(args.controlnet_model_path)
         
             if "controlnet" not in control_state_dict.keys():
-                from ..utils.model_converter import convert_controlnet_model
+                from utils.model_converter import convert_controlnet_model
                 control_state_dict = convert_controlnet_model(control_state_dict)
         controlnet = load_controlnet_model(control_state_dict, dtype=precison)
         models.update(controlnet)
 
     if args.color_palette_embedding == True:
-        from ..utils.model_loader import load_color_palette_embedding_model
+        from utils.model_loader import load_color_palette_embedding_model
         embedding_state_dict = None
         if args.color_palette_embedding_model_path is not None:
             embedding_state_dict = torch.load(args.color_palette_embedding_model_path)
@@ -186,9 +188,9 @@ def load_models(args):
     return models, tokenizer
 
 import wandb
-from ..pipelines.pipeline import generate_color_palette_embedding
+from utils.color_utils import make_pil_rgb_colors
+from pipelines.pipeline import generate_color_palette_embedding
 from PIL import Image
-from ..utils.color_utils import make_pil_rgb_colors
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding, embedding_ts, accelerator, args):
 
     embedding = accelerator.unwrap_model(embedding)
@@ -356,7 +358,10 @@ def train(accelerator,
                                     embedding_ts,
                                     accelerator,
                                     args)
-            
+                        
+                        lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
+                        print(list(lora_wrapper_model.state_dict().values())[0])
+
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
@@ -406,13 +411,12 @@ def main(args):
     embedding = models['color_palette_embedding']
     embedding_ts = models['color_palette_timestep_embedding']
 
-    from ..models.lora.lora import extract_lora_from_unet
+    from models.lora.lora import extract_lora_from_unet
     lora_wrapper_model = extract_lora_from_unet(diffusion)
 
     clip.requires_grad_(False)
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
-    # diffusion.requires_grad_(False)
 
     embedding.train()
     embedding_ts.train()
@@ -444,18 +448,18 @@ def main(args):
 
     # from torch.optim import AdamW
     # from lr_scheduler.lr_scheduler import CosineAnnealingWarmUpRestarts
-    # params_to_optimize = list(embedding.parameters()) + list(embedding_ts.parameters())
+    # params_to_optimize = list(embedding.parameters()) + list(embedding_ts.parameters()) + list(lora_wrapper_model.parameters())
     # optimizer = AdamW(
     #         params_to_optimize,
     #         lr=1e-06,
     #         betas=(0.9, 0.999),
     #         weight_decay=1e-2,
-    #         eps=1e-08,
+    #         eps=1e-06,
     #     )
-    # lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=1000, T_mult=2, eta_max=args.lr,  T_up=30, gamma=0.8)
+    # lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=2, eta_max=args.lr,  T_up=20, gamma=0.5)
 
     
-    from ..models.scheduler.ddpm import DDPMSampler
+    from models.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
     lora_wrapper_model, embedding, embedding_ts, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(

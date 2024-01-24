@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from tqdm import tqdm
-from ..models.scheduler.ddpm import DDPMSampler
+from models.scheduler.ddpm import DDPMSampler
 
 WIDTH = 512
 HEIGHT = 512
@@ -577,8 +577,6 @@ def generate_color_palette_embedding(
             uncond_context = clip(uncond_tokens)
 
             # This is Color Palette Embedding Model---------------------------
-            from ..models.embedding.extract_features import get_features
-            color_palette = get_features(color_palette)
             color_palette = (torch.tensor(color_palette, dtype=dtype)).unsqueeze(0).to(device)
             color_palette_embedding = color_palette_embedding_model(color_palette).to(dtype=dtype)
 

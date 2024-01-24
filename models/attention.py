@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import math
-from .lora.lora import get_lora_layers
+from models.lora.lora import get_lora_layers
 
 
 class SelfAttention(nn.Module):
@@ -76,12 +76,17 @@ class SelfAttention(nn.Module):
         # (Batch_Size, Seq_Len, Dim)
 
         if self.is_lora == True:
-            q_lora = self.q_lora_up(self.q_lora_down(x.to(dtype=torch.float32))).view(interim_shape).transpose(1, 2)
-            q_lora = q.to(dtype=torch.float32) + self.lora_scale * q_lora
-            k_lora = self.k_lora_up(self.k_lora_down(x.to(dtype=torch.float32))).view(interim_shape).transpose(1, 2)
-            k_lora = k.to(dtype=torch.float32) + self.lora_scale * k_lora
-            v_lora = self.v_lora_up(self.v_lora_down(x.to(dtype=torch.float32))).view(interim_shape).transpose(1, 2)
-            v_lora = v.to(dtype=torch.float32) + self.lora_scale * v_lora
+            if self.q_lora_down.weight.dtype == torch.float16:
+                lora_weight_type = torch.float16
+            else:
+                lora_weight_type = torch.float32
+            
+            q_lora = self.q_lora_up(self.q_lora_down(x.to(dtype=lora_weight_type))).view(interim_shape).transpose(1, 2)
+            q_lora = q.to(dtype=lora_weight_type) + self.lora_scale * q_lora
+            k_lora = self.k_lora_up(self.k_lora_down(x.to(dtype=lora_weight_type))).view(interim_shape).transpose(1, 2)
+            k_lora = k.to(dtype=lora_weight_type) + self.lora_scale * k_lora
+            v_lora = self.v_lora_up(self.v_lora_down(x.to(dtype=lora_weight_type))).view(interim_shape).transpose(1, 2)
+            v_lora = v.to(dtype=lora_weight_type) + self.lora_scale * v_lora
 
             weight = q_lora @ k_lora.transpose(-1, -2)
             weight /= math.sqrt(self.d_head) 
@@ -164,12 +169,17 @@ class CrossAttention(nn.Module):
         # (Batch_Size, Seq_Len_Q, Dim_Q)
 
         if self.is_lora == True:
-            q_lora = self.q_lora_up(self.q_lora_down(x.to(dtype=torch.float32))).view(interim_shape).transpose(1, 2)
-            q_lora = q.to(dtype=torch.float32) + self.lora_scale * q_lora
-            k_lora = self.k_lora_up(self.k_lora_down(y.to(dtype=torch.float32))).view(interim_shape).transpose(1, 2)
-            k_lora = k.to(dtype=torch.float32) + self.lora_scale * k_lora
-            v_lora = self.v_lora_up(self.v_lora_down(y.to(dtype=torch.float32))).view(interim_shape).transpose(1, 2)
-            v_lora = v.to(dtype=torch.float32) + self.lora_scale * v_lora
+            if self.q_lora_down.weight.dtype == torch.float16:
+                lora_weight_type = torch.float16
+            else:
+                lora_weight_type = torch.float32
+
+            q_lora = self.q_lora_up(self.q_lora_down(x.to(dtype=lora_weight_type))).view(interim_shape).transpose(1, 2)
+            q_lora = q.to(dtype=lora_weight_type) + self.lora_scale * q_lora
+            k_lora = self.k_lora_up(self.k_lora_down(y.to(dtype=lora_weight_type))).view(interim_shape).transpose(1, 2)
+            k_lora = k.to(dtype=lora_weight_type) + self.lora_scale * k_lora
+            v_lora = self.v_lora_up(self.v_lora_down(y.to(dtype=lora_weight_type))).view(interim_shape).transpose(1, 2)
+            v_lora = v.to(dtype=lora_weight_type) + self.lora_scale * v_lora
     
             weight = q_lora @ k_lora.transpose(-1, -2)
             weight /= math.sqrt(self.d_head) 

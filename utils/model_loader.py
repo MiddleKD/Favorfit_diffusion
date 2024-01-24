@@ -1,8 +1,8 @@
 import torch
-from ..models.clip.clip import CLIP
-from ..models.vae.encoder import VAE_Encoder
-from ..models.vae.decoder import VAE_Decoder
-from ..models.diffusion import Diffusion
+from models.clip.clip import CLIP
+from models.vae.encoder import VAE_Encoder
+from models.vae.decoder import VAE_Decoder
+from models.diffusion import Diffusion
 
 def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
@@ -35,7 +35,7 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     }
 
 
-from ..models.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
+from models.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
 
 def load_controlnet_model(state_dict=None, dtype=torch.float16):
     
@@ -52,11 +52,11 @@ def load_controlnet_model(state_dict=None, dtype=torch.float16):
     }
 
 
-from ..models.embedding.color_palette_embedding import ColorPaletteEmbedding, ColorPaletteTimestepEmbedding
-def load_color_palette_embedding_model(state_dict=None, num_features=119, n_embd=768, n_embd_ts=320, dtype=torch.float16):
+from models.embedding.color_palette_embedding import ColorPaletteEmbedding, ColorPaletteTimestepEmbedding
+def load_color_palette_embedding_model(state_dict=None, num_features=3, n_embd=768, n_embd_ts=320, dtype=torch.float16):
     
     colorpalette_model = ColorPaletteEmbedding(num_features, n_embd).to(dtype)
-    colorpalette_timestep_model = ColorPaletteTimestepEmbedding(num_features, n_embd_ts).to(dtype)
+    colorpalette_timestep_model = ColorPaletteTimestepEmbedding(num_features*4, n_embd_ts).to(dtype)
     
     if state_dict is not None:
         colorpalette_model.load_state_dict(state_dict["color_palette_embedding"])

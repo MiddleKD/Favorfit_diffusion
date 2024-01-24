@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from ..attention import SelfAttention
-from ..model_utils import zero_module
+from models.attention import SelfAttention
+from models.model_utils import zero_module
 
 
 class ResBlock(nn.Module):

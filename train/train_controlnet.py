@@ -145,24 +145,24 @@ def load_models(args):
         from transformers import CLIPTokenizer
         tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
-    from ..utils.model_loader import load_diffusion_model
+    from utils.model_loader import load_diffusion_model
     kwargs = {"is_controlnet":True, "controlnet_scale":1.0}
     if args.diffusion_model_path is not None:
         diffusion_state_dict = torch.load(args.diffusion_model_path)
 
         if "diffusion" not in diffusion_state_dict.keys():
-            from ..utils.model_converter import convert_model
+            from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **kwargs)
 
     if args.controlnet == True:
-        from ..utils.model_loader import load_controlnet_model
+        from utils.model_loader import load_controlnet_model
         control_state_dict = None
         if args.controlnet_model_path is not None:
             control_state_dict = torch.load(args.controlnet_model_path)
         
             if "controlnet" not in control_state_dict.keys():
-                from ..utils.model_converter import convert_controlnet_model
+                from utils.model_converter import convert_controlnet_model
                 control_state_dict = convert_controlnet_model(control_state_dict)
         controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32)
         models.update(controlnet)
@@ -170,7 +170,7 @@ def load_models(args):
     return models, tokenizer
 
 import wandb
-from ..pipelines.pipeline import generate_controlnet
+from pipelines.pipeline import generate_controlnet
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, embedding, accelerator, args):
 
@@ -427,7 +427,7 @@ def main(args):
     from torch.optim.lr_scheduler import LambdaLR
     lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
     
-    from ..models.scheduler.ddpm import DDPMSampler
+    from models.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
 
     controlnet, embedding, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(

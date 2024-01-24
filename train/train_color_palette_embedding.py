@@ -189,7 +189,7 @@ def load_models(args):
 
 import wandb
 from utils.color_utils import make_pil_rgb_colors
-from pipelines.pipeline import generate_color_palette_embedding
+from pipelines.pipline_color_palette_embedding import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding, embedding_ts, accelerator, args):
 
@@ -207,7 +207,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding, embe
     image_logs = []
     for validation_prompt, validation_palette in zip(args.validation_prompts, args.validation_palettes):
         for seed in [12345, 42, 110]:
-            output_image = generate_color_palette_embedding(
+            output_image = generate(
                 prompt=validation_prompt,
                 uncond_prompt="",
                 color_palette=validation_palette,

@@ -170,7 +170,7 @@ def load_models(args):
     return models, tokenizer
 
 import wandb
-from pipelines.pipeline import generate_controlnet
+from pipelines.pipline_controlnet import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, embedding, accelerator, args):
 
@@ -190,7 +190,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
         validation_image = Image.open(validation_image).convert("RGB")
 
         for seed in [12345, 42, 110]:
-            output_image = generate_controlnet(
+            output_image = generate(
                 prompt=validation_prompt,
                 uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
                 input_image=None,

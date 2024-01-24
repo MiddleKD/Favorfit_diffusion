@@ -5,7 +5,6 @@ from models.vae.decoder import VAE_Decoder
 from models.diffusion import Diffusion
 
 def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
-
     encoder = VAE_Encoder().to(dtype)
     decoder = VAE_Decoder().to(dtype)
     clip = CLIP().to(dtype)

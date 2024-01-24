@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from models.scheduler.ddpm import DDPMSampler
-from pipelines.utils import rescale, get_time_embedding
+from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes
 
 WIDTH = 512
 HEIGHT = 512
@@ -23,9 +23,10 @@ def generate(
     device=None,
     idle_device=None,
     tokenizer=None,
-    dtype=torch.float16
 ):
     with torch.no_grad():
+        dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
+
         if not 0 < strength <= 1:
             raise ValueError("strength must be between 0 and 1")
 
@@ -90,7 +91,7 @@ def generate(
             # (Height, Width, Channel)
             input_image_tensor = np.array(input_image_tensor)
             # (Height, Width, Channel) -> (Height, Width, Channel)
-            input_image_tensor = torch.tensor(input_image_tensor, dtype=dtype)
+            input_image_tensor = torch.tensor(input_image_tensor)
             # (Height, Width, Channel) -> (Height, Width, Channel)
             input_image_tensor = rescale(input_image_tensor, (0, 255), (-1, 1))
             # (Height, Width, Channel) -> (Batch_Size, Height, Width, Channel)
@@ -101,7 +102,8 @@ def generate(
             # (Batch_Size, 4, Latents_Height, Latents_Width)
             encoder_noise = torch.randn(latents_shape, generator=generator, device=device)
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = encoder(input_image_tensor, encoder_noise)
+            latents = encoder(input_image_tensor.to(dtype=dtype_map["encoder"]), 
+                              encoder_noise.to(dtype=dtype_map["encoder"]))
 
             # Add noise to the latents (the encoded input image)
             # (Batch_Size, 4, Latents_Height, Latents_Width)
@@ -111,8 +113,8 @@ def generate(
             to_idle(encoder)
         else:
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = torch.randn(latents_shape, generator=generator, device=device, dtype=dtype)
-
+            latents = torch.randn(latents_shape, generator=generator, device=device)
+    
         diffusion = models["diffusion"]
         diffusion.to(device)
 
@@ -131,7 +133,9 @@ def generate(
 
             # model_output is the predicted noise
             # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
-            model_output = diffusion(model_input, context, time_embedding)
+            model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]),
+                                     context.to(dtype=dtype_map["diffusion"]), 
+                                     time_embedding.to(dtype=dtype_map["diffusion"]))
 
             if do_cfg:
                 output_cond, output_uncond = model_output.chunk(2)
@@ -145,7 +149,7 @@ def generate(
         decoder = models["decoder"]
         decoder.to(device)
         # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 3, Height, Width)
-        images = decoder(latents)
+        images = decoder(latents.to(dtype=dtype_map["decoder"]))
         to_idle(decoder)
 
         images = rescale(images, (-1, 1), (0, 255), clamp=True)

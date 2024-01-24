@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from models.scheduler.ddpm import DDPMSampler
-from pipelines.utils import rescale, get_time_embedding
+from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes
 
 WIDTH = 512
 HEIGHT = 512
@@ -24,10 +24,11 @@ def generate(
     device=None,
     idle_device="cpu",
     tokenizer=None,
-    dtype=torch.float16,
     leave_tqdm=True,
 ):
     with torch.no_grad():
+        dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
+
         if idle_device:
             to_idle = lambda x: x.to(idle_device)
         else:
@@ -89,7 +90,7 @@ def generate(
             # (Height, Width, Channel)
             input_image_tensor = np.array(input_image_tensor)
             # (Height, Width, Channel) -> (Height, Width, Channel)
-            input_image_tensor = torch.tensor(input_image_tensor, dtype=dtype)
+            input_image_tensor = torch.tensor(input_image_tensor)
             # (Height, Width, Channel) -> (Height, Width, Channel)
             input_image_tensor = rescale(input_image_tensor, (0, 255), (-1, 1))
             # (Height, Width, Channel) -> (Batch_Size, Height, Width, Channel)
@@ -98,9 +99,10 @@ def generate(
             input_image_tensor = input_image_tensor.permute(0, 3, 1, 2).to(device)
 
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            encoder_noise = torch.randn(latents_shape, generator=generator, device=device, dtype=dtype)
+            encoder_noise = torch.randn(latents_shape, generator=generator, device=device)
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = encoder(input_image_tensor, encoder_noise)
+            latents = encoder(input_image_tensor.to(dtype=dtype_map["encoder"]), 
+                              encoder_noise.to(dtype=dtype_map["encoder"]))
 
             # Add noise to the latents (the encoded input image)
             # (Batch_Size, 4, Latents_Height, Latents_Width)
@@ -110,20 +112,20 @@ def generate(
             to_idle(encoder)
         else:
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = torch.randn(latents_shape, generator=generator, device=device, dtype=dtype)
+            latents = torch.randn(latents_shape, generator=generator, device=device)
 
         # controlnet embedding
         
         control_image_tensor = control_image.resize((WIDTH, HEIGHT))
         control_image_tensor = np.array(control_image_tensor)
-        control_image_tensor = torch.tensor(control_image_tensor, dtype=dtype)
+        control_image_tensor = torch.tensor(control_image_tensor)
         control_image_tensor = rescale(control_image_tensor, (0, 255), (0, 1))
         control_image_tensor = control_image_tensor.unsqueeze(0)
         control_image_tensor = control_image_tensor.permute(0, 3, 1, 2).to(device)
         
         controlnet_embedding_model = models["controlnet_embedding"]
         controlnet_embedding_model.to(device)
-        control_embedding_latent = controlnet_embedding_model(control_image_tensor)
+        control_embedding_latent = controlnet_embedding_model(control_image_tensor.to(dtype=dtype_map["controlnet_embedding"]))
         to_idle(controlnet_embedding_model)
 
 
@@ -148,10 +150,10 @@ def generate(
 
             # model_output is the predicted noise
             # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
-            controlnet_downs, controlnet_mids = controlnet_model(original_sample=control_img_input, 
-                                                                latent=control_embedding_input, 
-                                                                context=context, 
-                                                                time=time_embedding)
+            controlnet_downs, controlnet_mids = controlnet_model(original_sample=control_img_input.to(dtype=dtype_map["controlnet"]), 
+                                                                latent=control_embedding_input.to(dtype=dtype_map["controlnet"]), 
+                                                                context=context.to(dtype=dtype_map["controlnet"]), 
+                                                                time=time_embedding.to(dtype=dtype_map["controlnet"]))
             #---------------------------------------------------------------------
 
             # (Batch_Size, 4, Latents_Height, Latents_Width)
@@ -163,12 +165,12 @@ def generate(
 
             # model_output is the predicted noise
             # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
-            model_output = diffusion(model_input, 
-                                    context, 
-                                    time_embedding, 
+            model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]),
+                                    context.to(dtype=dtype_map["diffusion"]),
+                                    time_embedding.to(dtype=dtype_map["diffusion"]),
                                     additional_res_condition=[
-                                        [cur.to(dtype=dtype) for cur in controlnet_downs], 
-                                        [cur.to(dtype=dtype) for cur in controlnet_mids]
+                                        [cur.to(dtype=dtype_map["diffusion"]) for cur in controlnet_downs], 
+                                        [cur.to(dtype=dtype_map["diffusion"]) for cur in controlnet_mids]
                                     ]
             )
 
@@ -187,7 +189,7 @@ def generate(
         decoder = models["decoder"]
         decoder.to(device)
         # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 3, Height, Width)
-        images = decoder(latents)
+        images = decoder(latents.to(dtype=dtype_map["decoder"]))
         to_idle(decoder)
 
         images = rescale(images, (-1, 1), (0, 255), clamp=True)

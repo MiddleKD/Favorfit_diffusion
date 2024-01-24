@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from models.scheduler.ddpm import DDPMSampler
-from pipelines.utils import rescale, get_time_embedding
+from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes
 
 WIDTH = 512
 HEIGHT = 512
@@ -24,10 +24,11 @@ def generate(
     device=None,
     idle_device="cpu",
     tokenizer=None,
-    dtype=torch.float16,
     leave_tqdm=True
 ):
     with torch.no_grad():
+        dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
+
         if idle_device:
             to_idle = lambda x: x.to(idle_device)
         else:
@@ -64,14 +65,14 @@ def generate(
             uncond_context = clip(uncond_tokens)
 
             # This is Color Palette Embedding Model---------------------------
-            color_palette = (torch.tensor(color_palette, dtype=dtype)).unsqueeze(0).to(device)
-            color_palette_embedding = color_palette_embedding_model(color_palette).to(dtype=dtype)
+            color_palette = torch.tensor(color_palette).unsqueeze(0).to(device)
+            color_palette_embedding = color_palette_embedding_model(color_palette.to(dtype=dtype_map["color_palette_embedding"]))
 
-            uncon_color_palette = (torch.zeros_like(color_palette, dtype=dtype)).to(device)
-            uncon_color_palette_embedding = color_palette_embedding_model(uncon_color_palette)
+            uncon_color_palette = torch.zeros_like(color_palette).to(device)
+            uncon_color_palette_embedding = color_palette_embedding_model(uncon_color_palette.to(dtype=dtype_map["color_palette_embedding"]))
 
             cond_context = torch.cat([cond_context, color_palette_embedding], 1)
-            uncond_context = torch.cat([uncond_context, uncon_color_palette_embedding], 1).to(dtype=dtype)
+            uncond_context = torch.cat([uncond_context, uncon_color_palette_embedding], 1)
             #-------------------------------------------------------------------
 
             # (Batch_Size, Seq_Len, Dim) + (Batch_Size, Seq_Len, Dim) -> (2 * Batch_Size, Seq_Len, Dim)
@@ -87,8 +88,8 @@ def generate(
             context = clip(tokens)
 
             # This is Color Palette Embedding Model---------------------------
-            color_palette = (torch.tensor(color_palette, dtype=dtype)).to(device)
-            color_palette_embedding = color_palette_embedding_model(color_palette)
+            color_palette = torch.tensor(color_palette).to(device)
+            color_palette_embedding = color_palette_embedding_model(color_palette.to(dtype=dtype_map["color_palette_embedding"]))
 
             context = torch.cat([context, color_palette_embedding], 1)
 
@@ -111,7 +112,7 @@ def generate(
             # (Height, Width, Channel)
             input_image_tensor = np.array(input_image_tensor)
             # (Height, Width, Channel) -> (Height, Width, Channel)
-            input_image_tensor = torch.tensor(input_image_tensor, dtype=dtype)
+            input_image_tensor = torch.tensor(input_image_tensor)
             # (Height, Width, Channel) -> (Height, Width, Channel)
             input_image_tensor = rescale(input_image_tensor, (0, 255), (-1, 1))
             # (Height, Width, Channel) -> (Batch_Size, Height, Width, Channel)
@@ -120,9 +121,10 @@ def generate(
             input_image_tensor = input_image_tensor.permute(0, 3, 1, 2).to(device)
 
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            encoder_noise = torch.randn(latents_shape, generator=generator, device=device, dtype=dtype)
+            encoder_noise = torch.randn(latents_shape, generator=generator, device=device)
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = encoder(input_image_tensor, encoder_noise)
+            latents = encoder(input_image_tensor.to(dtype=dtype_map["encoder"]), 
+                              encoder_noise.to(dtype=dtype_map["encoder"]))
 
             # Add noise to the latents (the encoded input image)
             # (Batch_Size, 4, Latents_Height, Latents_Width)
@@ -132,7 +134,7 @@ def generate(
             to_idle(encoder)
         else:
             # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = torch.randn(latents_shape, generator=generator, device=device, dtype=dtype)
+            latents = torch.randn(latents_shape, generator=generator, device=device)
 
 
         # diffusion
@@ -144,8 +146,8 @@ def generate(
         timesteps = tqdm(sampler.timesteps, leave=leave_tqdm)
         for i, timestep in enumerate(timesteps):
             # (1, 320)
-            time_embedding = get_time_embedding(timestep).to(device)
-            color_palette_timestep_embedding = color_palette_timestep_embedding_model(color_palette).to(dtype=dtype)
+            time_embedding = get_time_embedding(timestep, dtype=dtype_map["color_palette_timestep_embedding"]).to(device)
+            color_palette_timestep_embedding = color_palette_timestep_embedding_model(color_palette.to(dtype=dtype_map["color_palette_timestep_embedding"]))
             time_embedding += color_palette_timestep_embedding
 
             # (Batch_Size, 4, Latents_Height, Latents_Width)
@@ -157,9 +159,9 @@ def generate(
 
             # model_output is the predicted noise
             # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
-            model_output = diffusion(model_input, 
-                                    context, 
-                                    time_embedding,
+            model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]), 
+                                    context.to(dtype=dtype_map["diffusion"]), 
+                                    time_embedding.to(dtype=dtype_map["diffusion"]),
             )
 
             if do_cfg:
@@ -177,7 +179,7 @@ def generate(
         decoder = models["decoder"]
         decoder.to(device)
         # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 3, Height, Width)
-        images = decoder(latents)
+        images = decoder(latents.to(dtype=dtype_map["decoder"]))
         to_idle(decoder)
 
         images = rescale(images, (-1, 1), (0, 255), clamp=True)

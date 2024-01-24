@@ -1,3 +1,7 @@
+if __name__ == "__main__":
+    import sys, os
+    sys.path.append(os.getcwd())
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -75,6 +79,7 @@ class ColorPaletteTimestepEmbedding(nn.Module):
     def __init__(self, in_features=12, n_embd=320):
         super().__init__()
 
+        self.position_embedding = nn.Parameter(torch.zeros(in_features))
         self.cl_encoder = nn.Sequential(
             nn.Linear(in_features, 64),
             ResBlock(64, 128, 256),
@@ -89,12 +94,14 @@ class ColorPaletteTimestepEmbedding(nn.Module):
 
     def forward(self, x):
         x = x.reshape([x.size(0), -1])
+        x += self.position_embedding
         x = self.cl_encoder(x)
         x = self.out_layer(x)
         return x
     
 
 if __name__ == "__main__":
+
     temp_input = torch.randn([3, 4, 3])
     model = ColorPaletteEmbedding()
 

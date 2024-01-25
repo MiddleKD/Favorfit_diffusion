@@ -72,6 +72,11 @@ def parse_args():
         default=1,
     )
     parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=2,
+    )
+    parser.add_argument(
         "--save_ckpt_step",
         type=int,
         default=20,
@@ -430,7 +435,7 @@ def main(args):
         train_dataset, 
         shuffle=True, 
         collate_fn=collate_fn,
-        batch_size=2,
+        batch_size=args.batch_size,
         num_workers=0
     )
  

@@ -15,6 +15,12 @@ import json
 def parse_palette_argument(palette_string):
     return json.loads(palette_string)
 
+def print_gpu_memory_usage():
+    # 각 GPU의 메모리 사용량 출력
+    for i in range(torch.cuda.device_count()):
+        gpu = torch.cuda.get_device_name(i)
+        print(f"GPU {gpu}: {torch.cuda.memory_allocated(i) / 1024**2:.2f} MB / {torch.cuda.max_memory_allocated(i) / 1024**2:.2f} MB")
+
 def parse_args():
     parser = argparse.ArgumentParser(description="diffusion test train")
     parser.add_argument(
@@ -342,7 +348,9 @@ def train(accelerator,
                 global_step += 1
 
                 if accelerator.is_main_process:
-
+                    if global_step % 5 == 0:
+                        print_gpu_memory_usage()
+                        
                     if global_step % args.save_ckpt_step == 0:
                         save_path = os.path.join("./training", f"checkpoint-{global_step}")
                         os.makedirs(save_path,exist_ok=True)

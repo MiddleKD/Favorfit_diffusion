@@ -350,7 +350,7 @@ def train(accelerator,
                 if accelerator.is_main_process:
                     if global_step % 5 == 0:
                         print_gpu_memory_usage()
-                        
+
                     if global_step % args.save_ckpt_step == 0:
                         save_path = os.path.join("./training", f"checkpoint-{global_step}")
                         os.makedirs(save_path,exist_ok=True)
@@ -479,7 +479,7 @@ def main(args):
         tracker_config.pop("validation_prompts")
         tracker_config.pop("validation_palettes")
 
-        accelerator.init_trackers("train_color_palette_embedding", config=tracker_config)
+        accelerator.init_trackers("test_train", config=tracker_config)
     
     clip.to(accelerator.device, dtype=weight_dtype)
     encoder.to(accelerator.device, dtype=weight_dtype)

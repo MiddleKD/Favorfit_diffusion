@@ -1397,7 +1397,6 @@ def convert_controlnet_model(state_dict):
 # HS lora model => Favorfit diffusion lora
 def convert_lora_model(state_dict):
     converted = {}
-    converted['lora'] = {}
 
     lns = {"encoders":"down_blocks", "bottleneck":"mid_block", "decoders":"up_blocks"}
     qkv = ["k","q","v","out"]

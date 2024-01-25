@@ -1,5 +1,6 @@
-import sys, os
-sys.path.append(os.getcwd())
+if __name__ == "__main__":
+    import sys, os
+    sys.path.append(os.getcwd())
 
 import os
 from tqdm import tqdm
@@ -360,7 +361,6 @@ def train(accelerator,
                                     args)
                         
                         lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
-                        print(list(lora_wrapper_model.state_dict().values())[0])
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)

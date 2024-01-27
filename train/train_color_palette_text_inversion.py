@@ -323,8 +323,6 @@ def train(accelerator,
                                     embedding_ts,
                                     accelerator,
                                     args)
-                        
-                        lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
@@ -376,6 +374,7 @@ def main(args):
     decoder = models['decoder'] 
     diffusion = models['diffusion']
     embedding_ts = models['color_palette_timestep_embedding']
+    lora_wrapper_model = None
 
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)

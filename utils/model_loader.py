@@ -7,7 +7,6 @@ from models.diffusion import Diffusion
 def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     encoder = VAE_Encoder().to(dtype)
     decoder = VAE_Decoder().to(dtype)
-    clip = CLIP().to(dtype)
 
     if kwargs.get("is_inpaint") == True:
         diffusion = Diffusion(in_channels=9, **kwargs).to(dtype)
@@ -17,7 +16,12 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     if state_dict is not None:
         encoder.load_state_dict(state_dict['encoder'], strict=True)
         decoder.load_state_dict(state_dict['decoder'], strict=True)
-        clip.load_state_dict(state_dict['clip'], strict=True)
+
+        if kwargs.get("clip_train") == True:
+            clip = CLIP(n_vocab=49480+540).to(dtype=kwargs.get("clip_dtype"))
+        else:
+            clip = CLIP(n_vocab=49480).to(dtype)
+            clip.load_state_dict(state_dict['clip'], strict=True)
 
         if kwargs.get("is_lora") == True:
             diffusion.load_state_dict(state_dict['diffusion'], strict=False)
@@ -25,6 +29,7 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
                 diffusion.load_state_dict(state_dict['lora'], strict=False)
         else:
             diffusion.load_state_dict(state_dict['diffusion'], strict=True)
+        
 
     return {
         'clip': clip,
@@ -54,14 +59,14 @@ def load_controlnet_model(state_dict=None, dtype=torch.float16):
 from models.embedding.color_palette_embedding import ColorPaletteEmbedding, ColorPaletteTimestepEmbedding
 def load_color_palette_embedding_model(state_dict=None, num_features=3, n_embd=768, n_embd_ts=320, dtype=torch.float16):
     
-    colorpalette_model = ColorPaletteEmbedding(num_features, n_embd).to(dtype)
+    # colorpalette_model = ColorPaletteEmbedding(num_features, n_embd).to(dtype)
     colorpalette_timestep_model = ColorPaletteTimestepEmbedding(num_features*4, n_embd_ts).to(dtype)
     
     if state_dict is not None:
-        colorpalette_model.load_state_dict(state_dict["color_palette_embedding"])
+        # colorpalette_model.load_state_dict(state_dict["color_palette_embedding"])
         colorpalette_timestep_model.load_state_dict(state_dict["color_palette_timestep_embedding"])
 
     return {
-        'color_palette_embedding': colorpalette_model,
+        # 'color_palette_embedding': colorpalette_model,
         'color_palette_timestep_embedding': colorpalette_timestep_model
     }

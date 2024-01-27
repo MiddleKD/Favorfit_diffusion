@@ -411,12 +411,13 @@ def main(args):
     embedding = models['color_palette_embedding']
     embedding_ts = models['color_palette_timestep_embedding']
 
-    from models.lora.lora import extract_lora_from_unet
-    lora_wrapper_model = extract_lora_from_unet(diffusion)
-
     clip.requires_grad_(False)
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
+    diffusion.requires_grad_(False)
+
+    from models.lora.lora import extract_lora_from_unet
+    lora_wrapper_model = extract_lora_from_unet(diffusion)
 
     embedding.train()
     embedding_ts.train()
@@ -465,7 +466,8 @@ def main(args):
     lora_wrapper_model, embedding, embedding_ts, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         lora_wrapper_model, embedding, embedding_ts, optimizer, train_dataloader, lr_scheduler
     )
-
+    lora_wrapper_model.requires_grad_(True)
+    
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
         weight_dtype = torch.float16

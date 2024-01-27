@@ -70,9 +70,9 @@ class CLIPLayer(nn.Module):
         return x
 
 class CLIP(nn.Module):
-    def __init__(self):
+    def __init__(self, n_vocab = 49408):
         super().__init__()
-        self.embedding = CLIPEmbedding(49408, 768, 77)
+        self.embedding = CLIPEmbedding(n_vocab, 768, 77)
 
         self.layers = nn.ModuleList([
             CLIPLayer(12, 768) for i in range(12)

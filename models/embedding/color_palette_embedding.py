@@ -81,21 +81,18 @@ class ColorPaletteTimestepEmbedding(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.zeros(in_features))
         self.cl_encoder = nn.Sequential(
-            nn.Linear(in_features, 64),
-            ResBlock(64, 128, 256),
+            nn.Linear(in_features, 128),
             nn.LayerNorm(128),
-            nn.SELU(),
-            ResBlock(128, 320, 256),
-            nn.LayerNorm(320),
-            nn.SELU(),
+            nn.Linear(128, 320),
         )
         
-        self.out_layer = nn.Linear(320, n_embd)
+        self.out_layer = nn.Linear(n_embd, n_embd)
 
-    def forward(self, x):
+    def forward(self, x, time):
         x = x.reshape([x.size(0), -1])
         x += self.position_embedding
         x = self.cl_encoder(x)
+        x += time
         x = self.out_layer(x)
         return x
     
@@ -109,6 +106,6 @@ if __name__ == "__main__":
     print(output.shape)
 
     model = ColorPaletteTimestepEmbedding()
-
-    output = model(temp_input)
+    time = torch.randn([3,320])
+    output = model(temp_input, time)
     print(output.shape)

@@ -112,10 +112,8 @@ def make_train_dataset(path, tokenizer, accelerator):
             [f"&ColorPalette={color_id}& "+text for text, color_id in zip(examples[caption_column], examples[color_id_column])], 
             padding="max_length", max_length=77).input_ids
 
-        colors_ids = (torch.LongTensor(examples[color_id_column]) + tokenizer.vocab_size).tolist()
-
         examples["pixel_values"] = images
-        examples["input_ids"] = [colors_id + tokenized_id for colors_id, tokenized_id in zip(colors_ids, tokenized_ids)]
+        examples["input_ids"] = tokenized_ids
 
         return examples
     

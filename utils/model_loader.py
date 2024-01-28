@@ -18,9 +18,9 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
         decoder.load_state_dict(state_dict['decoder'], strict=True)
 
         if kwargs.get("clip_train") == True:
-            clip = CLIP(n_vocab=49480).to(dtype=kwargs.get("clip_dtype"))
+            clip = CLIP(n_vocab=49408).to(dtype=kwargs.get("clip_dtype"))
         else:
-            clip = CLIP(n_vocab=49480).to(dtype)
+            clip = CLIP(n_vocab=49408).to(dtype)
         clip.load_state_dict(state_dict['clip'], strict=True)
 
         if kwargs.get("is_lora") == True:

@@ -19,6 +19,8 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
         if kwargs.get("clip_train") == True:
             clip = CLIP(n_vocab=49480+540).to(dtype=kwargs.get("clip_dtype"))
+            state_dict['clip'].pop("embedding.token_embedding.weight")
+            clip.load_state_dict(state_dict['clip'], strict=False)
         else:
             clip = CLIP(n_vocab=49480).to(dtype)
             clip.load_state_dict(state_dict['clip'], strict=True)

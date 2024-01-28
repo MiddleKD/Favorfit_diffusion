@@ -249,13 +249,9 @@ def collate_fn(examples):
         "input_ids": input_ids,
     }
 
-def get_time_embedding(timestep, dtype=torch.float16):
-    freqs = torch.pow(10000, -torch.arange(start=0, end=160, dtype=dtype) / 160) 
-    x = torch.tensor(timestep, dtype=dtype)[:, None] * freqs[None]
-    return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
-
 
 import torch.nn.functional as F
+from pipelines.utils import get_time_embedding
 def train_controlnet(accelerator,
                      train_dataloader,
                      tokenizer,

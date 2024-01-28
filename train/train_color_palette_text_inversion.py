@@ -93,7 +93,8 @@ def parse_args():
 def make_train_dataset(path, tokenizer, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, color_column, color_id_column, caption_column = column_names
+    # image_column, color_column, color_id_column, caption_column = column_names
+    image_column, caption_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -108,10 +109,11 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        tokenized_ids = tokenizer.batch_encode_plus(
-            [f"&ColorPalette={color_id}& "+text for text, color_id in zip(examples[caption_column], examples[color_id_column])], 
-            padding="max_length", max_length=77).input_ids
-
+        # tokenized_ids = tokenizer.batch_encode_plus(
+        #     [f"&ColorPalette={color_id}& "+text for text, color_id in zip(examples[caption_column], examples[color_id_column])], 
+        #     padding="max_length", max_length=77).input_ids
+        tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77).input_ids
+        
         examples["pixel_values"] = images
         examples["input_ids"] = tokenized_ids
 
@@ -156,7 +158,6 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
 
     image_logs = []
     for validation_prompt in args.validation_prompts:
-        print(validation_prompt)
         for seed in [12345, 42, 110]:
             output_image = generate(
                 prompt=validation_prompt,
@@ -205,13 +206,9 @@ def collate_fn(examples):
         "input_ids": input_ids,
     }
 
-def get_time_embedding(timestep, dtype=torch.float16):
-    freqs = torch.pow(10000, -torch.arange(start=0, end=160, dtype=dtype) / 160) 
-    x = torch.tensor(timestep, dtype=dtype)[:, None] * freqs[None]
-    return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
-
 
 import torch.nn.functional as F
+from pipelines.utils import get_time_embedding
 def train(accelerator,
         train_dataloader,
         tokenizer,
@@ -338,11 +335,11 @@ def main(args):
     diffusion = models['diffusion']
     lora_wrapper_model = None
 
-    clip.requires_grad_(False)
-    clip.embedding.requires_grad_(True)
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
     diffusion.requires_grad_(False)
+    clip.requires_grad_(False)
+    clip.embedding.token_embedding.requires_grad_(True)
 
     if args.lora == True:
         from models.lora.lora import extract_lora_from_unet
@@ -414,7 +411,7 @@ def main(args):
         tracker_config.pop("validation_prompts")
         tracker_config.pop("validation_palettes")
 
-        accelerator.init_trackers("train_color_palette_embedding", config=tracker_config)
+        accelerator.init_trackers("train_textual_inversion", config=tracker_config)
     
     encoder.to(accelerator.device, dtype=weight_dtype)
     decoder.to(accelerator.device, dtype=weight_dtype)

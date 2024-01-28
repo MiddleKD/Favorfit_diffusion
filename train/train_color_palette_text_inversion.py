@@ -201,14 +201,10 @@ def collate_fn(examples):
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
     input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
-    
-    colors = torch.stack([example["colors"] for example in examples])
-    colors = colors.to(memory_format=torch.contiguous_format).float()
 
     return {
         "pixel_values": pixel_values,
         "input_ids": input_ids,
-        "colors": colors,
     }
 
 def get_time_embedding(timestep, dtype=torch.float16):

@@ -338,6 +338,8 @@ def main(args):
     diffusion = models['diffusion']
     lora_wrapper_model = None
 
+    clip.requires_grad_(False)
+    clip.embedding.requires_grad_(True)
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
     diffusion.requires_grad_(False)

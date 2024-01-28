@@ -23,15 +23,6 @@ def parse_args():
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
     )
     parser.add_argument(
-        "--color_palette_embedding",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--color_palette_embedding_model_path",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
         "--lora",
         action="store_true",
     )
@@ -117,14 +108,14 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77-4).input_ids
+        tokenized_ids = tokenizer.batch_encode_plus(
+            [f"&ColorPalette={color_id}& "+text for text, color_id in zip(examples[caption_column], examples[color_id_column])], 
+            padding="max_length", max_length=77).input_ids
 
         colors_ids = (torch.LongTensor(examples[color_id_column]) + tokenizer.vocab_size).tolist()
-        colors = torch.FloatTensor(examples[color_column]) / 127.5 -1
 
         examples["pixel_values"] = images
         examples["input_ids"] = [colors_id + tokenized_id for colors_id, tokenized_id in zip(colors_ids, tokenized_ids)]
-        examples["colors"] = colors
 
         return examples
     
@@ -152,43 +143,33 @@ def load_models(args):
             
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "lora_scale":1.0, "clip_train":True, "clip_dtype":torch.float32})
 
-    if args.color_palette_embedding == True:
-        from utils.model_loader import load_color_palette_embedding_model
-        embedding_state_dict = None
-        if args.color_palette_embedding_model_path is not None:
-            embedding_state_dict = torch.load(args.color_palette_embedding_model_path)
-        embedding = load_color_palette_embedding_model(embedding_state_dict, dtype=torch.float32)
-        models.update(embedding)
-
     return models, tokenizer
 
 import wandb
-from utils.color_utils import make_pil_rgb_colors
-from pipelines.pipline_color_palette import generate
+from pipelines.pipeline_default import generate
 from PIL import Image
-def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding_ts, accelerator, args):
+def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, args):
 
     models = {}
     models['clip'] = clip
     models['encoder'] = encoder
     models['decoder'] = decoder
     models['diffusion'] = diffusion
-    models['color_palette_timestep_embedding'] = embedding_ts
 
     image_logs = []
-    for validation_prompt, validation_palette in zip(args.validation_prompts, args.validation_palettes):
+    for validation_prompt in args.validation_prompts:
+        print(validation_prompt)
         for seed in [12345, 42, 110]:
             output_image = generate(
                 prompt=validation_prompt,
-                uncond_prompt="",
-                color_palette=validation_palette,
+                uncond_prompt="deform, low quality",
+                input_image=None,
                 do_cfg=True,
                 cfg_scale=7.5,
                 sampler_name="ddpm",
                 n_inference_steps=20,
-                strength=1.0,
-                models=models,
                 seed=seed,
+                models=models,
                 device=accelerator.device,
                 idle_device="cuda",
                 tokenizer=tokenizer,
@@ -198,8 +179,9 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding_ts, a
             image = Image.fromarray(output_image)
 
             image_logs.append(
-                {"validation_palettes": validation_palette, "images": image, "validation_prompts": validation_prompt}
+                {"images": image, "validation_prompts": validation_prompt}
             )
+
 
     for tracker in accelerator.trackers:
         if tracker.name == "wandb":
@@ -208,10 +190,6 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding_ts, a
             for log in image_logs:
                 image = log["images"]
                 validation_prompt = log["validation_prompts"]
-                validation_palette = log["validation_palettes"]
-
-                validation_palette_pil = make_pil_rgb_colors(validation_palette).resize([512,512])
-                formatted_images.append(wandb.Image(validation_palette_pil, caption="Palette conditioning"))
                 formatted_images.append(wandb.Image(image, caption=validation_prompt))
 
             tracker.log({"validation": formatted_images})
@@ -247,7 +225,6 @@ def train(accelerator,
         encoder,
         decoder,
         diffusion,
-        embedding_ts,
         lora_wrapper_model,
         sampler,
         optimizer,
@@ -276,8 +253,7 @@ def train(accelerator,
             
             contexts = clip(batch['input_ids']).to(weight_dtype)
 
-            time_embeddings = get_time_embedding(timesteps, dtype=torch.float32).to(latents.device)
-            time_embeddings = embedding_ts(batch["colors"], time_embeddings).to(dtype=weight_dtype)
+            time_embeddings = get_time_embedding(timesteps).to(latents.device)
 
             model_pred = diffusion(
                 latents,
@@ -307,9 +283,6 @@ def train(accelerator,
                         clip = accelerator.unwrap_model(clip)
                         torch.save(clip, os.path.join(save_path, f"clip_{epoch}.pth"))
 
-                        embedding_ts = accelerator.unwrap_model(embedding_ts)
-                        torch.save(embedding_ts, os.path.join(save_path, f"embeddingts_{epoch}.pth"))
-
                         if args.lora == True:
                             lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
                             torch.save(lora_wrapper_model, os.path.join(save_path, f"lora_{epoch}.pth"))
@@ -320,7 +293,6 @@ def train(accelerator,
                                     clip,
                                     tokenizer,
                                     diffusion,
-                                    embedding_ts,
                                     accelerator,
                                     args)
 
@@ -333,9 +305,6 @@ def train(accelerator,
 
             clip = accelerator.unwrap_model(clip)
             torch.save(clip, f"./training/clip_{epoch}.pth")
-
-            embedding_ts = accelerator.unwrap_model(embedding_ts)
-            torch.save(embedding_ts, f"./training/embeddingts_{epoch}.pth")
 
             if args.lora == True:
                 lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
@@ -373,7 +342,6 @@ def main(args):
     encoder = models['encoder']
     decoder = models['decoder'] 
     diffusion = models['diffusion']
-    embedding_ts = models['color_palette_timestep_embedding']
     lora_wrapper_model = None
 
     encoder.requires_grad_(False)
@@ -385,7 +353,6 @@ def main(args):
         lora_wrapper_model = extract_lora_from_unet(diffusion)
         lora_wrapper_model.requires_grad_(True)
         lora_wrapper_model.train()
-    embedding_ts.train()
 
     train_dataset = make_train_dataset(args.train_data_path, tokenizer, accelerator)
 
@@ -400,7 +367,7 @@ def main(args):
  
     from torch.optim import AdamW
 
-    params_to_optimize = list(clip.parameters()) + list(embedding_ts.parameters())
+    params_to_optimize = list(clip.parameters())
     if args.lora == True:
         params_to_optimize += list(lora_wrapper_model.parameters())
     optimizer = AdamW(
@@ -431,9 +398,9 @@ def main(args):
     sampler = DDPMSampler(generator)
     
     if args.lora == True:
-        to_train_models = [clip, embedding_ts, lora_wrapper_model]
+        to_train_models = [clip, lora_wrapper_model]
     else:
-        to_train_models = [clip, embedding_ts]
+        to_train_models = [clip]
         
     *to_train_models, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         *to_train_models, optimizer, train_dataloader, lr_scheduler
@@ -466,7 +433,6 @@ def main(args):
         encoder,
         decoder,
         diffusion,
-        embedding_ts,
         lora_wrapper_model,
         sampler,
         optimizer,

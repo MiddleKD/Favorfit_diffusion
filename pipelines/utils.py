@@ -51,7 +51,7 @@ def extract_euclidien_similarity(data_arr):
     
     return similarities
 
-def get_colors_and_tokens(palette, color_list):
+def get_colors_and_ids(palette, color_list):
     palette = np.array(palette)
     color_array = np.array(color_list)+1
 
@@ -60,7 +60,7 @@ def get_colors_and_tokens(palette, color_list):
     for target in palette:
         similarities = extract_euclidien_similarity(np.concatenate([target[None,:], color_array]))[0][1:]
 
-        id_results.append(np.argmax(similarities) + 49409)  # number of clip unique tokens
+        id_results.append(np.argmax(similarities))
         rgb_results.append((color_array[np.argmax(similarities)]-1).tolist())
         
     return rgb_results, id_results

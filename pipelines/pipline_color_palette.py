@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from models.scheduler.ddpm import DDPMSampler
-from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes, get_colors_and_tokens, load_colot_list_data
+from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes, get_colors_and_ids, load_colot_list_data
 
 WIDTH = 512
 HEIGHT = 512
@@ -46,15 +46,14 @@ def generate(
         clip.to(device)
 
         color_list = load_colot_list_data()
-        color_palette, color_palette_tokens = get_colors_and_tokens(color_palette, color_list)
-        color_palette_tensor = torch.tensor(color_palette, device=device).unsqueeze(0) / 127.5 - 1
+        color_palette, color_palette_ids = get_colors_and_ids(color_palette, color_list)
+        prompt = f"&ColorPalette={color_palette_ids}& " + prompt
 
         if do_cfg:
             # Convert into a list of length Seq_Len=77
             cond_tokens = tokenizer.batch_encode_plus(
-                [prompt], padding="max_length", max_length=77 - len(color_palette_tokens)
+                [prompt], padding="max_length", max_length=77
             ).input_ids
-            cond_tokens = [color_palette_tokens+cur for cur in cond_tokens]
             # (Batch_Size, Seq_Len)
             cond_tokens = torch.tensor(cond_tokens, dtype=torch.long, device=device)
             # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
@@ -73,9 +72,8 @@ def generate(
         else:
             # Convert into a list of length Seq_Len=77
             tokens = tokenizer.batch_encode_plus(
-                [prompt], padding="max_length", max_length=77 - len(color_palette_tokens)
+                [prompt], padding="max_length", max_length=77
             ).input_ids
-            cond_tokens = [color_palette_tokens+cur for cur in cond_tokens]
             # (Batch_Size, Seq_Len)
             tokens = torch.tensor(tokens, dtype=torch.long, device=device)
             # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
@@ -127,14 +125,11 @@ def generate(
         # diffusion
         diffusion = models["diffusion"]
         diffusion.to(device)
-        color_palette_timestep_embedding_model = models["color_palette_timestep_embedding"]
-        color_palette_timestep_embedding_model.to(device)
         
         timesteps = tqdm(sampler.timesteps, leave=leave_tqdm)
         for i, timestep in enumerate(timesteps):
             # (1, 320)
-            time_embedding = get_time_embedding(timestep, dtype=dtype_map["color_palette_timestep_embedding"]).to(device)
-            time_embedding = color_palette_timestep_embedding_model(color_palette_tensor.to(dtype=dtype_map["color_palette_timestep_embedding"]), time_embedding)
+            time_embedding = get_time_embedding(timestep).to(device)
 
             # (Batch_Size, 4, Latents_Height, Latents_Width)
             model_input = latents
@@ -159,8 +154,6 @@ def generate(
             latents = sampler.step(timestep, latents, model_output)
 
         to_idle(diffusion)
-        to_idle(color_palette_timestep_embedding_model)
-
 
         decoder = models["decoder"]
         decoder.to(device)

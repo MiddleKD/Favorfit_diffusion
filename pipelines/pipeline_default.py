@@ -23,6 +23,7 @@ def generate(
     device=None,
     idle_device=None,
     tokenizer=None,
+    leave_tqdm=True
 ):
     with torch.no_grad():
         dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
@@ -118,7 +119,7 @@ def generate(
         diffusion = models["diffusion"]
         diffusion.to(device)
 
-        timesteps = tqdm(sampler.timesteps)
+        timesteps = tqdm(sampler.timesteps, leave=leave_tqdm)
 
         for i, timestep in enumerate(timesteps):
             # (1, 320)

@@ -11,9 +11,6 @@ import torch
 from torchvision import transforms
 
 import argparse
-import json
-def parse_palette_argument(palette_string):
-    return json.loads(palette_string)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")

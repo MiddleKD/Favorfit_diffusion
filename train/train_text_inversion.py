@@ -11,9 +11,6 @@ import torch
 from torchvision import transforms
 
 import argparse
-import json
-def parse_palette_argument(palette_string):
-    return json.loads(palette_string)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
@@ -34,12 +31,6 @@ def parse_args():
     parser.add_argument(
         "--validation_prompts",
         type=str,
-        default=None,
-        nargs="+",
-    )
-    parser.add_argument(
-        "--validation_palettes",
-        type=parse_palette_argument,
         default=None,
         nargs="+",
     )
@@ -114,9 +105,6 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        # tokenized_ids = tokenizer.batch_encode_plus(
-        #     [f"&ColorPalette={color_id}& "+text for text, color_id in zip(examples[caption_column], examples[color_id_column])], 
-        #     padding="max_length", max_length=77).input_ids
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77).input_ids
         
         examples["pixel_values"] = images

@@ -15,17 +15,9 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
     parser.add_argument(
-        "--tokenizer",
-        action="store_true",
-    )
-    parser.add_argument(
         "--diffusion_model_path",
         type=str,
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
-    )
-    parser.add_argument(
-        "--controlnet",
-        action="store_true",
     )
     parser.add_argument(
         "--controlnet_model_path",
@@ -53,6 +45,11 @@ def parse_args():
         "--epochs",
         type=int,
         default=3,
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=2,
     )
     parser.add_argument(
         "--save_ckpt_step",
@@ -144,10 +141,8 @@ def load_models(args):
     else:
         precison = torch.float32
 
-    tokenizer = None
-    if args.tokenizer == True:
-        from transformers import CLIPTokenizer
-        tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
+    from transformers import CLIPTokenizer
+    tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
     from utils.model_loader import load_diffusion_model
     kwargs = {"is_controlnet":True, "controlnet_scale":1.0}
@@ -159,17 +154,16 @@ def load_models(args):
             diffusion_state_dict = convert_model(diffusion_state_dict)
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **kwargs)
 
-    if args.controlnet == True:
-        from utils.model_loader import load_controlnet_model
-        control_state_dict = None
-        if args.controlnet_model_path is not None:
-            control_state_dict = torch.load(args.controlnet_model_path)
-        
-            if "controlnet" not in control_state_dict.keys():
-                from utils.model_converter import convert_controlnet_model
-                control_state_dict = convert_controlnet_model(control_state_dict)
-        controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32)
-        models.update(controlnet)
+    from utils.model_loader import load_controlnet_model
+    control_state_dict = None
+    if args.controlnet_model_path is not None:
+        control_state_dict = torch.load(args.controlnet_model_path)
+    
+        if "controlnet" not in control_state_dict.keys():
+            from utils.model_converter import convert_controlnet_model
+            control_state_dict = convert_controlnet_model(control_state_dict)
+    controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32)
+    models.update(controlnet)
 
     return models, tokenizer
 
@@ -410,7 +404,7 @@ def main(args):
         train_dataset, 
         shuffle=True, 
         collate_fn=collate_fn,
-        batch_size=3,
+        batch_size=args.batch_size,
         num_workers=0
     )
 

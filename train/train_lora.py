@@ -342,6 +342,7 @@ def main(args):
 
     from models.lora.lora import extract_lora_from_unet
     lora_wrapper_model = extract_lora_from_unet(diffusion)
+    lora_wrapper_model.requires_grad_(True)
     lora_wrapper_model.train()
 
     train_dataset = make_train_dataset(args.train_data_path, tokenizer, accelerator)

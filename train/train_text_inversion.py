@@ -247,7 +247,7 @@ def train(accelerator,
             
             latents = sampler.add_noise(latents, timesteps, noise)
             
-            contexts = clip(batch['input_ids'])
+            contexts = clip(batch['input_ids']).to(dtype=weight_dtype)
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
 

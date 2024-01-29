@@ -18,31 +18,9 @@ def parse_palette_argument(palette_string):
 def parse_args():
     parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
     parser.add_argument(
-        "--tokenizer",
-        action="store_true",
-    )
-    parser.add_argument(
         "--diffusion_model_path",
         type=str,
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
-    )
-    parser.add_argument(
-        "--controlnet",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--controlnet_model_path",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--color_palette_embedding",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--color_palette_embedding_model_path",
-        type=str,
-        default=None,
     )
     parser.add_argument(
         "--lora",
@@ -69,6 +47,11 @@ def parse_args():
         "--epochs",
         type=int,
         default=3,
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=2,
     )
     parser.add_argument(
         "--save_ckpt_step",
@@ -115,7 +98,8 @@ def parse_args():
 def make_train_dataset(path, tokenizer, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, caption_column, color_column = column_names
+    # image_column, color_column, color_id_column, caption_column = column_names
+    image_column, caption_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -130,13 +114,13 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
+        # tokenized_ids = tokenizer.batch_encode_plus(
+        #     [f"&ColorPalette={color_id}& "+text for text, color_id in zip(examples[caption_column], examples[color_id_column])], 
+        #     padding="max_length", max_length=77).input_ids
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77).input_ids
-
-        colors = torch.FloatTensor([cur["total"] for cur in examples[color_column]])
         
         examples["pixel_values"] = images
         examples["input_ids"] = tokenized_ids
-        examples["colors"] = colors
 
         return examples
     
@@ -151,10 +135,8 @@ def load_models(args):
     else:
         precison = torch.float32
 
-    tokenizer = None
-    if args.tokenizer == True:
-        from transformers import CLIPTokenizer
-        tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
+    from transformers import CLIPTokenizer
+    tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
     from utils.model_loader import load_diffusion_model
     if args.diffusion_model_path is not None:
@@ -164,61 +146,34 @@ def load_models(args):
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
             
-    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "lora_scale":1.0})
-
-    if args.controlnet == True:
-        from utils.model_loader import load_controlnet_model
-        control_state_dict = None
-        if args.controlnet_model_path is not None:
-            control_state_dict = torch.load(args.controlnet_model_path)
-        
-            if "controlnet" not in control_state_dict.keys():
-                from utils.model_converter import convert_controlnet_model
-                control_state_dict = convert_controlnet_model(control_state_dict)
-        controlnet = load_controlnet_model(control_state_dict, dtype=precison)
-        models.update(controlnet)
-
-    if args.color_palette_embedding == True:
-        from utils.model_loader import load_color_palette_embedding_model
-        embedding_state_dict = None
-        if args.color_palette_embedding_model_path is not None:
-            embedding_state_dict = torch.load(args.color_palette_embedding_model_path)
-        embedding = load_color_palette_embedding_model(embedding_state_dict, dtype=torch.float32)
-        models.update(embedding)
+    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "lora_scale":1.0, "clip_train":True, "clip_dtype":torch.float32})
 
     return models, tokenizer
 
 import wandb
-from utils.color_utils import make_pil_rgb_colors
-from pipelines.pipline_color_palette_embedding import generate
+from pipelines.pipeline_default import generate
 from PIL import Image
-def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding, embedding_ts, accelerator, args):
-
-    embedding = accelerator.unwrap_model(embedding)
-    embedding_ts = accelerator.unwrap_model(embedding_ts)
+def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, args):
 
     models = {}
     models['clip'] = clip
     models['encoder'] = encoder
     models['decoder'] = decoder
     models['diffusion'] = diffusion
-    models['color_palette_embedding'] = embedding
-    models['color_palette_timestep_embedding'] = embedding_ts
 
     image_logs = []
-    for validation_prompt, validation_palette in zip(args.validation_prompts, args.validation_palettes):
+    for validation_prompt in args.validation_prompts:
         for seed in [12345, 42, 110]:
             output_image = generate(
                 prompt=validation_prompt,
-                uncond_prompt="",
-                color_palette=validation_palette,
+                uncond_prompt="deform, low quality",
+                input_image=None,
                 do_cfg=True,
                 cfg_scale=7.5,
                 sampler_name="ddpm",
                 n_inference_steps=20,
-                strength=1.0,
-                models=models,
                 seed=seed,
+                models=models,
                 device=accelerator.device,
                 idle_device="cuda",
                 tokenizer=tokenizer,
@@ -228,8 +183,9 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding, embe
             image = Image.fromarray(output_image)
 
             image_logs.append(
-                {"validation_palettes": validation_palette, "images": image, "validation_prompts": validation_prompt}
+                {"images": image, "validation_prompts": validation_prompt}
             )
+
 
     for tracker in accelerator.trackers:
         if tracker.name == "wandb":
@@ -238,10 +194,6 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, embedding, embe
             for log in image_logs:
                 image = log["images"]
                 validation_prompt = log["validation_prompts"]
-                validation_palette = log["validation_palettes"]
-
-                validation_palette_pil = make_pil_rgb_colors(validation_palette).resize([512,512])
-                formatted_images.append(wandb.Image(validation_palette_pil, caption="Palette conditioning"))
                 formatted_images.append(wandb.Image(image, caption=validation_prompt))
 
             tracker.log({"validation": formatted_images})
@@ -253,14 +205,10 @@ def collate_fn(examples):
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
     input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
-    
-    colors = torch.stack([example["colors"] for example in examples])
-    colors = colors.to(memory_format=torch.contiguous_format).float()
 
     return {
         "pixel_values": pixel_values,
         "input_ids": input_ids,
-        "colors": colors,
     }
 
 
@@ -273,8 +221,6 @@ def train(accelerator,
         encoder,
         decoder,
         diffusion,
-        embedding,
-        embedding_ts,
         lora_wrapper_model,
         sampler,
         optimizer,
@@ -301,16 +247,9 @@ def train(accelerator,
             
             latents = sampler.add_noise(latents, timesteps, noise)
             
-            contexts = clip(batch['input_ids'])
-            colors = batch["colors"]
-            colorpalette_model = embedding
-            context_cat = colorpalette_model(colors).to("cuda")
-            contexts = torch.cat([contexts, context_cat], 1).to(dtype=weight_dtype)
+            contexts = clip(batch['input_ids']).to(weight_dtype)
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
-            colorpalette_ts_model = embedding_ts
-            time_sum = colorpalette_ts_model(colors).to(dtype=weight_dtype)
-            time_embeddings += time_sum
 
             model_pred = diffusion(
                 latents,
@@ -337,13 +276,12 @@ def train(accelerator,
                         save_path = os.path.join("./training", f"checkpoint-{global_step}")
                         os.makedirs(save_path,exist_ok=True)
 
-                        embedding = accelerator.unwrap_model(embedding)
-                        embedding_ts = accelerator.unwrap_model(embedding_ts)
-                        lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
+                        clip = accelerator.unwrap_model(clip)
+                        torch.save(clip, os.path.join(save_path, f"clip_{epoch}.pth"))
 
-                        torch.save(embedding, f"./training/embedding_{epoch}.pth")
-                        torch.save(embedding_ts, f"./training/embeddingts_{epoch}.pth")
-                        torch.save(embedding_ts, f"./training/lora_{epoch}.pth")
+                        if args.lora == True:
+                            lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
+                            torch.save(lora_wrapper_model, os.path.join(save_path, f"lora_{epoch}.pth"))
                     
                     if global_step % args.validation_step == 0:
                         log_validation(encoder,
@@ -351,12 +289,8 @@ def train(accelerator,
                                     clip,
                                     tokenizer,
                                     diffusion,
-                                    embedding,
-                                    embedding_ts,
                                     accelerator,
                                     args)
-                        
-                        lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
@@ -364,13 +298,13 @@ def train(accelerator,
         
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
-            embedding = accelerator.unwrap_model(embedding)
-            embedding_ts = accelerator.unwrap_model(embedding_ts)
-            lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
 
-            torch.save(embedding, f"./training/embedding_{epoch}.pth")
-            torch.save(embedding_ts, f"./training/embeddingts_{epoch}.pth")
-            torch.save(embedding_ts, f"./training/lora_{epoch}.pth")
+            clip = accelerator.unwrap_model(clip)
+            torch.save(clip, f"./training/clip_{epoch}.pth")
+
+            if args.lora == True:
+                lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
+                torch.save(lora_wrapper_model, f"./training/lora_{epoch}.pth")
 
 def main(args):
     cur_dir = os.path.dirname(os.path.abspath(__name__))
@@ -404,20 +338,19 @@ def main(args):
     encoder = models['encoder']
     decoder = models['decoder'] 
     diffusion = models['diffusion']
-    embedding = models['color_palette_embedding']
-    embedding_ts = models['color_palette_timestep_embedding']
+    lora_wrapper_model = None
 
-    clip.requires_grad_(False)
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
     diffusion.requires_grad_(False)
+    clip.requires_grad_(False)
+    clip.embedding.token_embedding.requires_grad_(True)
 
-    from models.lora.lora import extract_lora_from_unet
-    lora_wrapper_model = extract_lora_from_unet(diffusion)
-
-    embedding.train()
-    embedding_ts.train()
-    lora_wrapper_model.train()
+    if args.lora == True:
+        from models.lora.lora import extract_lora_from_unet
+        lora_wrapper_model = extract_lora_from_unet(diffusion)
+        lora_wrapper_model.requires_grad_(True)
+        lora_wrapper_model.train()
 
     train_dataset = make_train_dataset(args.train_data_path, tokenizer, accelerator)
 
@@ -426,12 +359,15 @@ def main(args):
         train_dataset, 
         shuffle=True, 
         collate_fn=collate_fn,
-        batch_size=2,
+        batch_size=args.batch_size,
         num_workers=0
     )
  
     from torch.optim import AdamW
-    params_to_optimize = list(embedding.parameters()) + list(embedding_ts.parameters()) + list(lora_wrapper_model.parameters())
+
+    params_to_optimize = list(clip.parameters())
+    if args.lora == True:
+        params_to_optimize += list(lora_wrapper_model.parameters())
     optimizer = AdamW(
             params_to_optimize,
             lr=args.lr,
@@ -459,10 +395,14 @@ def main(args):
     from models.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
-    lora_wrapper_model, embedding, embedding_ts, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        lora_wrapper_model, embedding, embedding_ts, optimizer, train_dataloader, lr_scheduler
+    if args.lora == True:
+        to_train_models = [clip, lora_wrapper_model]
+    else:
+        to_train_models = [clip]
+        
+    *to_train_models, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        *to_train_models, optimizer, train_dataloader, lr_scheduler
     )
-    lora_wrapper_model.requires_grad_(True)
     
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
@@ -472,18 +412,16 @@ def main(args):
 
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
-
         tracker_config.pop("validation_prompts")
-        tracker_config.pop("validation_palettes")
 
-        accelerator.init_trackers("train_color_palette_embedding", config=tracker_config)
+        accelerator.init_trackers("train_textual_inversion", config=tracker_config)
     
-    clip.to(accelerator.device, dtype=weight_dtype)
     encoder.to(accelerator.device, dtype=weight_dtype)
     decoder.to(accelerator.device, dtype=weight_dtype)
     diffusion.to(accelerator.device, dtype=weight_dtype)
-    lora_wrapper_model.to(accelerator.device, dtype=torch.float32)
-    
+    if args.lora == True:
+        lora_wrapper_model.to(accelerator.device, dtype=torch.float32)
+
     train(accelerator,
         train_dataloader,
         tokenizer,
@@ -491,8 +429,6 @@ def main(args):
         encoder,
         decoder,
         diffusion,
-        embedding,
-        embedding_ts,
         lora_wrapper_model,
         sampler,
         optimizer,

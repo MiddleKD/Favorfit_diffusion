@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument(
         "--precision",
         type=str,
-        default="no",
+        default="fp16",
         choices=["no", "fp16", "bf16"],
     )
     parser.add_argument(
@@ -244,7 +244,6 @@ def train(accelerator,
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
 
-            print(latents.dtype, contexts.dtype, time_embeddings.dtype)
             model_pred = diffusion(
                 latents,
                 contexts,

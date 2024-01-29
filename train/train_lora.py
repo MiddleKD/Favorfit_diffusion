@@ -270,7 +270,7 @@ def train(accelerator,
                         os.makedirs(save_path,exist_ok=True)
 
                         lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
-                        torch.save(lora_wrapper_model, f"./training/lora_{epoch}.pth")
+                        torch.save(lora_wrapper_model, os.path.join(save_path, f"lora_{epoch}.pth"))
                         
                         if args.clip == True:
                             clip = accelerator.unwrap_model(clip)

@@ -90,7 +90,7 @@ def parse_args():
     return args
 
 def make_train_dataset(path, tokenizer, accelerator):
-    dataset = load_dataset(path, cache_dir="./temp/")
+    dataset = load_dataset(path)
     column_names = dataset['train'].column_names
     image_column, caption_column = column_names
 

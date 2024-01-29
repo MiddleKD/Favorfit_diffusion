@@ -244,6 +244,7 @@ def train(accelerator,
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
 
+            print(latents.dtype, contexts.dtype, time_embeddings.dtype)
             model_pred = diffusion(
                 latents,
                 contexts,

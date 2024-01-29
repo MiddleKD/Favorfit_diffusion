@@ -107,7 +107,7 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        tokenized_ids = tokenizer.batch_encode_plus(["pokemon"+cur for cur in examples[caption_column]], padding="max_length", max_length=77).input_ids
+        tokenized_ids = tokenizer.batch_encode_plus(["pokemon "+cur for cur in examples[caption_column]], padding="max_length", max_length=77).input_ids
         
         examples["pixel_values"] = images
         examples["input_ids"] = tokenized_ids
@@ -388,9 +388,9 @@ def main(args):
     sampler = DDPMSampler(generator)
     
     if args.clip == True:
-        to_train_models = [lora_wrapper_model]
-    else:
         to_train_models = [lora_wrapper_model, clip]
+    else:
+        to_train_models = [lora_wrapper_model]
 
     *to_train_models, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         *to_train_models, optimizer, train_dataloader, lr_scheduler

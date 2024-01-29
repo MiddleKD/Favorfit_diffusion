@@ -18,10 +18,6 @@ def parse_palette_argument(palette_string):
 def parse_args():
     parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
     parser.add_argument(
-        "--tokenizer",
-        action="store_true",
-    )
-    parser.add_argument(
         "--diffusion_model_path",
         type=str,
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
@@ -129,10 +125,8 @@ def load_models(args):
     else:
         precison = torch.float32
 
-    tokenizer = None
-    if args.tokenizer == True:
-        from transformers import CLIPTokenizer
-        tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
+    from transformers import CLIPTokenizer
+    tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
     from utils.model_loader import load_diffusion_model
     if args.diffusion_model_path is not None:

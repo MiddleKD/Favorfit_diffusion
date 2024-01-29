@@ -312,7 +312,7 @@ def train(accelerator,
             timesteps = torch.randint(0, sampler.num_train_timesteps, (batch_size,), device="cpu").long()
             
             latents = sampler.add_noise(latents, timesteps, noise)
-            print(batch['input_ids'].device)
+
             contexts = clip(batch['input_ids'])
             colors = batch["colors"]
             colorpalette_model = embedding

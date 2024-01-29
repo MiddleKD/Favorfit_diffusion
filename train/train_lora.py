@@ -239,8 +239,7 @@ def train(accelerator,
             timesteps = torch.randint(0, sampler.num_train_timesteps, (batch_size,), device="cpu").long()
             
             latents = sampler.add_noise(latents, timesteps, noise)
-            print(batch['input_ids'].device)
-            print(next(clip.parameters()).device)
+
             contexts = clip(batch['input_ids'])
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
@@ -413,6 +412,10 @@ def main(args):
     decoder.to(accelerator.device, dtype=weight_dtype)
     diffusion.to(accelerator.device, dtype=weight_dtype)
     lora_wrapper_model.to(accelerator.device, dtype=torch.float32)
+    if args.clip == True:
+        clip.to(accelerator.device, dtype=torch.float32)
+    else:
+        clip.to(accelerator.device, dtype=weight_dtype)
     
     train(accelerator,
         train_dataloader,

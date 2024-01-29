@@ -94,7 +94,7 @@ def parse_args():
     return args
 
 def make_train_dataset(path, tokenizer, accelerator):
-    dataset = load_dataset(path)
+    dataset = load_dataset(path, cache_dir="./temp/")
     column_names = dataset['train'].column_names
     image_column, caption_column = column_names
 
@@ -151,7 +151,6 @@ def load_models(args):
     return models, tokenizer
 
 import wandb
-from utils.color_utils import make_pil_rgb_colors
 from pipelines.pipeline_default import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, args):

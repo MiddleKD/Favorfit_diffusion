@@ -320,7 +320,7 @@ def main(args):
 
     if args.seed is not None:
         set_seed(args.seed)
-        generator.manual_seed(42)
+        generator.manual_seed(args.seed)
     else:
         set_seed(42)
         generator.manual_seed(42)

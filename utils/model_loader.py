@@ -1,5 +1,6 @@
 import torch
 from models.clip.clip import CLIP
+from models.clip.clip_image_encoder import CLIPImageEncoder
 from models.vae.encoder import VAE_Encoder
 from models.vae.decoder import VAE_Decoder
 from models.diffusion import Diffusion
@@ -19,6 +20,8 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
         if kwargs.get("clip_train") == True:
             clip = CLIP(n_vocab=49408).to(dtype=kwargs.get("clip_dtype"))
+        elif kwargs.get("clip_image_encoder") == True:
+            clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype=kwargs.get("clip_dtype"))
         else:
             clip = CLIP(n_vocab=49408).to(dtype)
         clip.load_state_dict(state_dict['clip'], strict=True)

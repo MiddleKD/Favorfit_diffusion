@@ -1,3 +1,5 @@
+from torch import nn
+
 class CLIPImagePreprocessor:
     def __init__(self, 
                  crop_size=[224,224],
@@ -32,8 +34,9 @@ class CLIPImagePreprocessor:
         return pixel_values
 
 
-class CLIPImageEncoder:
+class CLIPImageEncoder(nn.Module):
     def __init__(self, from_pretrained=False):
+        super().__init__()
         from transformers import CLIPVisionConfig, CLIPVisionModel
 
         self.image_preprocessor = CLIPImagePreprocessor()
@@ -42,7 +45,7 @@ class CLIPImageEncoder:
         else:
             self.clip_image_encoder = CLIPVisionModel(CLIPVisionConfig())
 
-    def __call__(self, x):
+    def forward(self, x):
         x = self.clip_image_encoder(x).last_hidden_state
         return x
 

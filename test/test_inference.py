@@ -137,7 +137,7 @@ def controlnet(args):
     control_image = Image.open("./images/test_image/object_outpaint.jpg")
     control_image = control_image.resize((512,512))
 
-    from pipelines.pipline_controlnet import generate
+    from pipelines.pipline_default_controlnet import generate
     output_image = generate(
         prompt="A coffe cup and lemons",
         uncond_prompt="deform, low quality",

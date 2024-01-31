@@ -117,7 +117,7 @@ def generate(
             mask = np.array(mask_image.resize((WIDTH//8, HEIGHT//8))) / 255.0
             mask = torch.tensor(mask).unsqueeze(-1).unsqueeze(0).permute(0, 3, 1, 2).to(device)
 
-            mask_condition = np.array(mask_image.resize((WIDTH, HEIGHT))) / 255.0
+            mask_condition = np.array(mask_image.resize((WIDTH, HEIGHT)))
             masked_image_tensor = rescale(torch.tensor(input_image_np), (0, 255), (-1, 1)).numpy() * (mask_condition[:,:,None] < 0.5)
 
             masked_image_tensor = torch.tensor(masked_image_tensor)

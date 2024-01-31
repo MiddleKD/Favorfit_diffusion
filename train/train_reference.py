@@ -86,7 +86,7 @@ from models.clip.clip_image_encoder import CLIPImagePreprocessor
 def make_train_dataset(path, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, reference_column = column_names
+    image_column, reference_column, text_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -103,7 +103,7 @@ def make_train_dataset(path, accelerator):
         images = [image_transforms(image) for image in images]
 
         ref_images = [image.convert("RGB") for image in examples[reference_column]]
-        ref_images = [reference_transforms(image) for image in images]
+        ref_images = [reference_transforms(image)[0] for image in ref_images]
 
         examples["pixel_values"] = images
         examples["ref_values"] = ref_images
@@ -161,10 +161,10 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
                     models=models,
                     seed=seed,
                     device=accelerator.device,
-                    idle_device="cpu",
+                    idle_device="cuda",
                     leave_tqdm=False
                 )
-
+            
             image = Image.fromarray(output_image)
 
             image_logs.append(
@@ -230,7 +230,7 @@ def train(accelerator,
             timesteps = torch.randint(0, sampler.num_train_timesteps, (batch_size,), device="cpu").long()
             
             latents = sampler.add_noise(latents, timesteps, noise)
-            
+
             contexts = clip(batch['ref_values']).to(dtype=weight_dtype)
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
@@ -255,7 +255,7 @@ def train(accelerator,
                 global_step += 1
 
                 if accelerator.is_main_process:
-
+                    
                     if global_step % args.save_ckpt_step == 0:
                         save_path = os.path.join("./training", f"checkpoint-{global_step}")
                         os.makedirs(save_path,exist_ok=True)
@@ -308,7 +308,7 @@ def main(args):
         set_seed(42)
         generator.manual_seed(42)
 
-    models, tokenizer = load_models(args)
+    models = load_models(args)
 
     clip = models['clip']
     encoder = models['encoder']

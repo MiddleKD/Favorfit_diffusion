@@ -168,7 +168,7 @@ def load_models(args):
     return models, tokenizer
 
 import wandb
-from pipelines.pipline_controlnet import generate
+from pipelines.pipline_default_controlnet import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, embedding, accelerator, args):
 

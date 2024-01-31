@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument(
         "--report_to",
         type=str,
-        default="wandb",
+        default=None,
         choices=["wandb"],
     )
     parser.add_argument(

@@ -49,11 +49,11 @@ def generate(
         
         image_preprocessor = CLIPImagePreprocessor()
         if do_cfg:
-            cond_context = clip(image_preprocessor(ref_image))
-            uncond_context = clip(image_preprocessor(unref_image))
+            cond_context = clip(image_preprocessor(ref_image).to(device).to(dtype_map["clip"]))
+            uncond_context = clip(image_preprocessor(unref_image).to(device).to(dtype_map["clip"]))
             context = torch.cat([cond_context, uncond_context])
         else:
-            cond_context = clip(image_preprocessor(ref_image))
+            context = clip(image_preprocessor(ref_image).to(device).to(dtype_map["clip"]))
         to_idle(clip)
 
         if sampler_name == "ddpm":

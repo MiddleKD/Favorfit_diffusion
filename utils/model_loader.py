@@ -1,5 +1,6 @@
 import torch
 from models.clip.clip import CLIP
+from models.clip.clip_image_encoder import CLIPImageEncoder
 from models.vae.encoder import VAE_Encoder
 from models.vae.decoder import VAE_Decoder
 from models.diffusion import Diffusion
@@ -19,9 +20,12 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
         if kwargs.get("clip_train") == True:
             clip = CLIP(n_vocab=49408).to(dtype=kwargs.get("clip_dtype"))
+            clip.load_state_dict(state_dict['clip'], strict=True)
+        elif kwargs.get("clip_image_encoder") == True:
+            clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype=kwargs.get("clip_dtype"))
         else:
             clip = CLIP(n_vocab=49408).to(dtype)
-        clip.load_state_dict(state_dict['clip'], strict=True)
+            clip.load_state_dict(state_dict['clip'], strict=True)
 
         if kwargs.get("is_lora") == True:
             diffusion.load_state_dict(state_dict['diffusion'], strict=False)
@@ -53,20 +57,4 @@ def load_controlnet_model(state_dict=None, dtype=torch.float16):
     return {
         'controlnet': controlnet,
         'controlnet_embedding': controlnet_embedding,
-    }
-
-
-from models.embedding.color_palette_embedding import ColorPaletteEmbedding, ColorPaletteTimestepEmbedding
-def load_color_palette_embedding_model(state_dict=None, num_features=3, n_embd=768, n_embd_ts=320, dtype=torch.float16):
-    
-    # colorpalette_model = ColorPaletteEmbedding(num_features, n_embd).to(dtype)
-    colorpalette_timestep_model = ColorPaletteTimestepEmbedding(num_features*4, n_embd_ts).to(dtype)
-    
-    if state_dict is not None:
-        # colorpalette_model.load_state_dict(state_dict["color_palette_embedding"])
-        colorpalette_timestep_model.load_state_dict(state_dict["color_palette_timestep_embedding"])
-
-    return {
-        # 'color_palette_embedding': colorpalette_model,
-        'color_palette_timestep_embedding': colorpalette_timestep_model
     }

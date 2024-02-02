@@ -89,6 +89,10 @@ def parse_args():
         type=int,
         default=None,
     )
+    parser.add_argument(
+        "--global_mean_pooling",
+        action="store_true"
+    )
 
     args = parser.parse_args()
     return args
@@ -145,7 +149,7 @@ def load_models(args):
     tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
     from utils.model_loader import load_diffusion_model
-    kwargs = {"is_controlnet":True}
+    kwargs = {"is_controlnet":True, "global_mean_pooling":args.global_mean_pooling}
     if args.diffusion_model_path is not None:
         diffusion_state_dict = torch.load(args.diffusion_model_path)
 
@@ -187,27 +191,28 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
     for validation_prompt, validation_image in zip(args.validation_prompts, args.validation_images):
         validation_image = Image.open(validation_image).convert("RGB")
 
-        for seed in [12345, 42, 110]:
-            output_image = generate(
-                prompt=validation_prompt,
-                uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
-                input_image=None,
-                control_image=validation_image,
-                do_cfg=True,
-                cfg_scale=7.5,
-                sampler_name="ddpm",
-                n_inference_steps=20,
-                strength=0.9,
-                models=models,
-                seeds=seed,
-                device=accelerator.device,
-                idle_device="cuda",
-                tokenizer=tokenizer,
-                leave_tqdm=False
-            )
+        output_images = generate(
+            prompt=validation_prompt,
+            uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
+            input_image=None,
+            control_image=validation_image,
+            num_per_image=3,
+            do_cfg=True,
+            cfg_scale=7.5,
+            sampler_name="ddpm",
+            n_inference_steps=20,
+            strength=0.9,
+            models=models,
+            seeds=[12345, 42, 110],
+            device=accelerator.device,
+            idle_device="cuda",
+            tokenizer=tokenizer,
+            leave_tqdm=False
+        )
 
-            image = Image.fromarray(output_image)
+        images = [Image.fromarray(output_image) for output_image in output_images]
 
+        for image in images:
             image_logs.append(
                 {"validation_image": validation_image, "images": image, "validation_prompt": validation_prompt}
             )

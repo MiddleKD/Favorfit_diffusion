@@ -147,26 +147,28 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
     image_logs = []
     for validation_image_path in args.validation_image_paths:
         val_image = Image.open(validation_image_path).convert("RGB")
-        for seed in [12345, 42, 110]:
-            output_image = generate(
-                    ref_image=val_image,
-                    unref_image=None,
-                    input_image=None,
-                    control_image=None,
-                    strength=0.8,
-                    do_cfg=False,
-                    cfg_scale=7.5,
-                    sampler_name="ddpm",
-                    n_inference_steps=20,
-                    models=models,
-                    seeds=seed,
-                    device=accelerator.device,
-                    idle_device="cuda",
-                    leave_tqdm=False
-                )
-            
-            image = Image.fromarray(output_image)
 
+        output_images = generate(
+                ref_image=val_image,
+                unref_image=None,
+                input_image=None,
+                control_image=None,
+                num_per_image=3,
+                strength=0.8,
+                do_cfg=False,
+                cfg_scale=7.5,
+                sampler_name="ddpm",
+                n_inference_steps=20,
+                models=models,
+                seeds=[12345, 42, 110],
+                device=accelerator.device,
+                idle_device="cuda",
+                leave_tqdm=False
+            )
+            
+        images = [Image.fromarray(output_image) for output_image in output_images]
+
+        for image in images:
             image_logs.append(
                 {"images": image, "validation_image": val_image}
             )

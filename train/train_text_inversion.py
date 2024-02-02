@@ -151,25 +151,25 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
 
     image_logs = []
     for validation_prompt in args.validation_prompts:
-        for seed in [12345, 42, 110]:
-            output_image = generate(
-                prompt=validation_prompt,
-                uncond_prompt="deform, low quality",
-                input_image=None,
-                do_cfg=True,
-                cfg_scale=7.5,
-                sampler_name="ddpm",
-                n_inference_steps=20,
-                seeds=seed,
-                models=models,
-                device=accelerator.device,
-                idle_device="cuda",
-                tokenizer=tokenizer,
-                leave_tqdm=False
-            )
+        output_images = generate(
+            prompt=validation_prompt,
+            uncond_prompt="deform, low quality",
+            input_image=None,
+            do_cfg=True,
+            cfg_scale=7.5,
+            sampler_name="ddpm",
+            n_inference_steps=20,
+            seeds=[12345, 42, 110],
+            models=models,
+            device=accelerator.device,
+            idle_device="cuda",
+            tokenizer=tokenizer,
+            leave_tqdm=False
+        )
 
-            image = Image.fromarray(output_image)
+        images = [Image.fromarray(output_image) for output_image in output_images]
 
+        for image in images:
             image_logs.append(
                 {"images": image, "validation_prompts": validation_prompt}
             )

@@ -15,16 +15,19 @@ def generate(
     unref_image=None,
     input_image=None,
     control_image=None,
+    num_per_image=1,
     strength=0.8,
     do_cfg=True,
     cfg_scale=7.5,
     sampler_name="ddpm",
     n_inference_steps=50,
     models={},
-    seed=None,
+    seeds=None,
     device=None,
     idle_device=None,
-    leave_tqdm=True
+    leave_tqdm=True,
+    controlnet_scale=1.0,
+    **kwargs
 ):
     with torch.no_grad():
         dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
@@ -37,12 +40,22 @@ def generate(
         else:
             to_idle = lambda x: x
 
-        # Initialize random number generator according to the seed specified
-        generator = torch.Generator(device=device)
-        if seed is None:
-            generator.seed()
+        # For batch-----
+        generators = [torch.Generator(device=device) for _ in range(num_per_image)]
+        
+        if isinstance(seeds,int):
+            seeds = [seeds]*num_per_image
+        elif len(seeds) != num_per_image: 
+            print("length do not match. seeds set to None.")
+            seeds = None
+        
+        if seeds is None:
+            for generator in generators:
+                generator.seed()
         else:
-            generator.manual_seed(seed)
+            for generator, seed in zip(generators, seeds):
+                generator.manual_seed(seed)
+        # For batch-----
 
         clip = models["clip"]
         clip.to(device)
@@ -52,13 +65,26 @@ def generate(
             cond_context = clip(image_preprocessor(ref_image).to(device).to(dtype_map["clip"]))
             uncond_context = clip(image_preprocessor(unref_image).to(device).to(dtype_map["clip"]))
             context = torch.cat([cond_context, uncond_context])
+
+            # For batch-----
+            context = context.repeat_interleave(num_per_image, dim=0)
+            # For batch-----
         else:
             context = clip(image_preprocessor(ref_image).to(device).to(dtype_map["clip"]))
+
+            # For batch-----
+            context = context.repeat_interleave(num_per_image, dim=0)
+            # For batch-----
         to_idle(clip)
 
         if sampler_name == "ddpm":
-            sampler = DDPMSampler(generator)
-            sampler.set_inference_timesteps(n_inference_steps)
+            # For batch-----
+            samplers = []
+            for generator in generators:
+                sampler = DDPMSampler(generator)
+                sampler.set_inference_timesteps(n_inference_steps)
+                samplers.append(sampler)
+            # For batch-----
         else:
             raise ValueError("Unknown sampler value %s. ")
 
@@ -80,22 +106,37 @@ def generate(
             # (Batch_Size, Height, Width, Channel) -> (Batch_Size, Channel, Height, Width)
             input_image_tensor = input_image_tensor.permute(0, 3, 1, 2).to(device)
 
-            # (Batch_Size, 4, Latents_Height, Latents_Width)
-            encoder_noise = torch.randn(latents_shape, generator=generator, device=device)
-            # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = encoder(input_image_tensor.to(dtype=dtype_map["encoder"]), 
-                              encoder_noise.to(dtype=dtype_map["encoder"]))
+            # For batch-----
+            input_image_tensor = input_image_tensor.repeat_interleave(num_per_image, dim=0)
+            
+            encoder_noise = torch.cat([torch.randn(latents_shape, 
+                                                   generator=generator, 
+                                                   device=device) 
+                                                   for generator in generators
+                                    ])
 
-            # Add noise to the latents (the encoded input image)
-            # (Batch_Size, 4, Latents_Height, Latents_Width)
-            sampler.set_strength(strength=strength)
-            latents = sampler.add_noise(latents, sampler.timesteps[0])
+            input_image_tensor = input_image_tensor.to(dtype=dtype_map["encoder"])
+            encoder_noise = encoder_noise.to(dtype=dtype_map["encoder"])
+
+            latents = []
+            for idx, (its, en) in enumerate(zip(input_image_tensor, encoder_noise)):
+                sampler = samplers[idx]
+                sampler.set_strength(strength=strength)
+                latent = encoder(its.unsqueeze(0), en.unsqueeze(0))
+                latent = sampler.add_noise(latent, sampler.timesteps[0])
+                latents.append(latent)
+            latents = torch.cat(latents)
+            # For batch-----
 
             to_idle(encoder)
         else:
-            # (Batch_Size, 4, Latents_Height, Latents_Width)
-            latents = torch.randn(latents_shape, generator=generator, device=device)
-
+            # For batch-----
+            latents = torch.cat([torch.randn(latents_shape, 
+                                            generator=generator, 
+                                            device=device) 
+                                            for generator in generators]
+                                )
+            # For batch-----
 
         # controlnet embedding
         if control_image is not None:
@@ -106,6 +147,10 @@ def generate(
             control_image_tensor = control_image_tensor.unsqueeze(0)
             control_image_tensor = control_image_tensor.permute(0, 3, 1, 2).to(device)
             
+            # For batch-----
+            control_image_tensor = control_image_tensor.repeat_interleave(num_per_image, dim=0)
+            # For batch-----
+
             controlnet_embedding_model = models["controlnet_embedding"]
             controlnet_embedding_model.to(device)
             control_embedding_latent = controlnet_embedding_model(control_image_tensor.to(dtype=dtype_map["controlnet_embedding"]))
@@ -134,6 +179,7 @@ def generate(
                 if do_cfg:
                     # (Batch_Size, 4, Latents_Height, Latents_Width) -> (2 * Batch_Size, 4, Latents_Height, Latents_Width)
                     control_img_input = control_img_input.repeat(2, 1, 1, 1)
+                    control_embedding_input = control_embedding_input.repeat(2, 1, 1, 1)
                 
                 # model_output is the predicted noise
                 # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
@@ -158,7 +204,9 @@ def generate(
                                     additional_res_condition=[
                                         [cur.to(dtype=dtype_map["diffusion"]) for cur in controlnet_downs], 
                                         [cur.to(dtype=dtype_map["diffusion"]) for cur in controlnet_mids]
-                                    ] if control_image is not None else None
+                                    ] if control_image is not None else None,
+                                    controlnet_scale=controlnet_scale,
+                                    **kwargs
             )
 
             if do_cfg:
@@ -182,4 +230,4 @@ def generate(
         # (Batch_Size, Channel, Height, Width) -> (Batch_Size, Height, Width, Channel)
         images = images.permute(0, 2, 3, 1)
         images = images.to("cpu", torch.uint8).numpy()
-        return images[0]
+        return images

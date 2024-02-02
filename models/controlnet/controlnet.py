@@ -43,8 +43,10 @@ class ControlNetConditioningEmbedding(nn.Module):
 
 
 class Controlnet(nn.Module):
-    def __init__(self, in_channels=4):
+    def __init__(self, in_channels=4, **kwargs):
         super().__init__()
+        self.global_mean_pooling = kwargs.get("global_mean_pooling")
+
         self.time_embed = TimeEmbedding(320)
 
         self.encoders = nn.ModuleList([
@@ -126,10 +128,15 @@ class Controlnet(nn.Module):
 
         controlnet_outs = []
         for skip_connection, zero_conv in zip(skip_connections, self.zero_convs):
-            controlnet_outs.append(zero_conv(skip_connection))
+            latent = zero_conv(skip_connection)
+            if self.global_mean_pooling == True:
+                latent = torch.mean(latent, dim=(2, 3), keepdim=True)
+            controlnet_outs.append(latent)
 
         latent = self.bottleneck(latent, context, time)
         latent = self.bottleneck_out(latent)
+        if self.global_mean_pooling == True:
+            latent = torch.mean(latent, dim=(2, 3), keepdim=True)
 
         controlnet_downs = controlnet_outs[::-1]
         controlnet_mids = [latent]

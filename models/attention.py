@@ -17,7 +17,6 @@ class SelfAttention(nn.Module):
         self.d_head = d_embed // n_heads
 
         self.is_lora = kwargs.get('is_lora')
-        self.lora_scale = kwargs.get('lora_scale')
 
         if self.is_lora == True:
             self.k_lora_down, self.k_lora_up = get_lora_layers(d_embed, d_embed, rank=4)
@@ -25,7 +24,7 @@ class SelfAttention(nn.Module):
             self.v_lora_down, self.v_lora_up = get_lora_layers(d_embed, d_embed, rank=4)
             self.out_lora_down, self.out_lora_up = get_lora_layers(d_embed, d_embed, rank=4)
 
-    def forward(self, x, causal_mask=False):
+    def forward(self, x, causal_mask=False, **kwargs):
         # x: # (Batch_Size, Seq_Len, Dim)
 
         # (Batch_Size, Seq_Len, Dim)
@@ -76,6 +75,11 @@ class SelfAttention(nn.Module):
         # (Batch_Size, Seq_Len, Dim)
 
         if self.is_lora == True:
+            if kwargs.get('lora_scale') == None:
+                self.lora_scale = 1.0
+            else:
+                self.lora_scale = kwargs.get('lora_scale')
+
             if self.q_lora_down.weight.dtype == torch.float16:
                 lora_weight_type = torch.float16
             else:
@@ -114,7 +118,6 @@ class CrossAttention(nn.Module):
         self.d_head = d_embed // n_heads
 
         self.is_lora = kwargs.get('is_lora')
-        self.lora_scale = kwargs.get('lora_scale')
 
         if self.is_lora == True:
             self.k_lora_down, self.k_lora_up = get_lora_layers(d_cross, d_embed, rank=4)
@@ -122,7 +125,7 @@ class CrossAttention(nn.Module):
             self.v_lora_down, self.v_lora_up = get_lora_layers(d_cross, d_embed, rank=4)
             self.out_lora_down, self.out_lora_up = get_lora_layers(d_embed, d_embed, rank=4)
     
-    def forward(self, x, y):
+    def forward(self, x, y, **kwargs):
         # x (latent): # (Batch_Size, Seq_Len_Q, Dim_Q)
         # y (context): # (Batch_Size, Seq_Len_KV, Dim_KV) = (Batch_Size, 77, 768)
 
@@ -169,6 +172,11 @@ class CrossAttention(nn.Module):
         # (Batch_Size, Seq_Len_Q, Dim_Q)
 
         if self.is_lora == True:
+            if kwargs.get('lora_scale') == None:
+                self.lora_scale = 1.0
+            else:
+                self.lora_scale = kwargs.get('lora_scale')
+
             if self.q_lora_down.weight.dtype == torch.float16:
                 lora_weight_type = torch.float16
             else:

@@ -159,7 +159,7 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
                     sampler_name="ddpm",
                     n_inference_steps=20,
                     models=models,
-                    seed=seed,
+                    seeds=seed,
                     device=accelerator.device,
                     idle_device="cuda",
                     leave_tqdm=False

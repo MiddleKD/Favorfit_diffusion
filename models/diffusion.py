@@ -38,7 +38,7 @@ class UNET_ResidualBlock(nn.Module):
         else:
             self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
     
-    def forward(self, feature, time):
+    def forward(self, feature, time, **kwargs):
         # feature: (Batch_Size, In_Channels, Height, Width)
         # time: (1, 1280)
         
@@ -96,7 +96,7 @@ class UNET_AttentionBlock(nn.Module):
 
         self.conv_output = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
     
-    def forward(self, x, context):
+    def forward(self, x, context, **kwargs):
         # x: (Batch_Size, Features, Height, Width)
         # context: (Batch_Size, Seq_Len, Dim)
 
@@ -125,7 +125,7 @@ class UNET_AttentionBlock(nn.Module):
         x = self.layernorm_1(x)
         
         # (Batch_Size, Height * Width, Features) -> (Batch_Size, Height * Width, Features)
-        x = self.attention_1(x)
+        x = self.attention_1(x, **kwargs)
         
         # (Batch_Size, Height * Width, Features) + (Batch_Size, Height * Width, Features) -> (Batch_Size, Height * Width, Features)
         x += residue_short
@@ -139,7 +139,7 @@ class UNET_AttentionBlock(nn.Module):
         x = self.layernorm_2(x)
         
         # (Batch_Size, Height * Width, Features) -> (Batch_Size, Height * Width, Features)
-        x = self.attention_2(x, context)
+        x = self.attention_2(x, context, **kwargs)
         
         # (Batch_Size, Height * Width, Features) + (Batch_Size, Height * Width, Features) -> (Batch_Size, Height * Width, Features)
         x += residue_short
@@ -186,12 +186,12 @@ class Upsample(nn.Module):
         return self.conv(x)
 
 class SwitchSequential(nn.Sequential):
-    def forward(self, x, context, time):
+    def forward(self, x, context, time, **kwargs):
         for layer in self:
             if isinstance(layer, UNET_AttentionBlock):
-                x = layer(x, context)
+                x = layer(x, context, **kwargs)
             elif isinstance(layer, UNET_ResidualBlock):
-                x = layer(x, time)
+                x = layer(x, time, **kwargs)
             else:
                 x = layer(x)
         return x
@@ -286,14 +286,14 @@ class UNET(nn.Module):
             SwitchSequential(UNET_ResidualBlock(640, 320), UNET_AttentionBlock(8, 40, **kwargs)),
         ])
 
-    def forward(self, x, context, time, additional_down_conditions=None, additional_mid_conditions=None, additional_condition_scale=1.0):
+    def forward(self, x, context, time, additional_down_conditions=None, additional_mid_conditions=None, additional_condition_scale=1.0, **kwargs):
         # x: (Batch_Size, 4, Height / 8, Width / 8)
         # context: (Batch_Size, Seq_Len, Dim) 
         # time: (1, 1280)
 
         skip_connections = []
         for layers in self.encoders:
-            x = layers(x, context, time)
+            x = layers(x, context, time, **kwargs)
             skip_connections.append(x)
 
         x = self.bottleneck(x, context, time)
@@ -302,13 +302,13 @@ class UNET(nn.Module):
             for layers in self.decoders:
                 # Since we always concat with the skip connection of the encoder, the number of features increases before being sent to the decoder's layer
                 x = torch.cat((x, skip_connections.pop()), dim=1)
-                x = layers(x, context, time)
+                x = layers(x, context, time, **kwargs)
         else:
             x += additional_mid_conditions[0] * additional_condition_scale
 
             for layers, additional_down_condition in zip(self.decoders, additional_down_conditions):
                 x = torch.cat((x, skip_connections.pop() + (additional_down_condition * additional_condition_scale)), dim=1)
-                x = layers(x, context, time)
+                x = layers(x, context, time, **kwargs)
         return x
 
 
@@ -342,25 +342,31 @@ class Diffusion(nn.Module):
         self.final = UNET_OutputLayer(320, 4)
 
         self.is_controlnet = kwargs.get('is_controlnet')
-        self.controlnet_scale = kwargs.get('controlnet_scale')
     
-    def forward(self, latent, context, time, additional_res_condition=None):
+    def forward(self, latent, context, time, additional_res_condition=None, **kwargs):
 
         time = self.time_embedding(time)
 
         # (Batch, 4, Height / 8, Width / 8) -> (Batch, 320, Height / 8, Width / 8)
         if self.is_controlnet == True:
+            if kwargs.get("controlnet_scale") is not None:
+                self.controlnet_scale = kwargs.get("controlnet_scale")
+            else:
+                self.controlnet_scale = 1.0
+            
             controlnet_downs, controlnet_mids = additional_res_condition
             output = self.unet(x=latent, 
                                context=context, 
                                time=time, 
                                additional_down_conditions=controlnet_downs, 
                                additional_mid_conditions=controlnet_mids,
-                               additional_condition_scale=self.controlnet_scale)
+                               additional_condition_scale=self.controlnet_scale, 
+                               **kwargs)
         else:
             output = self.unet(x=latent, 
                                context=context, 
-                               time=time)
+                               time=time, 
+                               **kwargs)
 
         output = self.final(output)
         

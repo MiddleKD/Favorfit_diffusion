@@ -145,7 +145,7 @@ def load_models(args):
     tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
     from utils.model_loader import load_diffusion_model
-    kwargs = {"is_controlnet":True, "controlnet_scale":1.0}
+    kwargs = {"is_controlnet":True}
     if args.diffusion_model_path is not None:
         diffusion_state_dict = torch.load(args.diffusion_model_path)
 
@@ -199,7 +199,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
                 n_inference_steps=20,
                 strength=0.9,
                 models=models,
-                seed=seed,
+                seeds=seed,
                 device=accelerator.device,
                 idle_device="cuda",
                 tokenizer=tokenizer,

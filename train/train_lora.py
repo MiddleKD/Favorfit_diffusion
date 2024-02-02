@@ -136,7 +136,7 @@ def load_models(args):
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
     
-    kwargs = {"is_lora":True, "lora_scale":1.0}
+    kwargs = {"is_lora":True}
     if args.clip == True:
         kwargs["clip_train"] = True
         kwargs["clip_dtype"] = torch.float32
@@ -166,7 +166,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
                 cfg_scale=7.5,
                 sampler_name="ddpm",
                 n_inference_steps=20,
-                seed=seed,
+                seeds=seed,
                 models=models,
                 device=accelerator.device,
                 idle_device="cuda",

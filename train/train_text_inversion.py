@@ -134,7 +134,7 @@ def load_models(args):
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
             
-    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "lora_scale":1.0, "clip_train":True, "clip_dtype":torch.float32})
+    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "clip_train":True, "clip_dtype":torch.float32})
 
     return models, tokenizer
 
@@ -160,7 +160,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
                 cfg_scale=7.5,
                 sampler_name="ddpm",
                 n_inference_steps=20,
-                seed=seed,
+                seeds=seed,
                 models=models,
                 device=accelerator.device,
                 idle_device="cuda",

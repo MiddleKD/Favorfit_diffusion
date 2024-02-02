@@ -1,3 +1,6 @@
+Favorfit_remove_bg/
+Favorfit_image_to_text/
+postprocess_remove_bg/
 __pycache__/*
 wandb/*
 training/*

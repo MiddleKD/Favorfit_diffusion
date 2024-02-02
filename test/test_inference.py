@@ -71,7 +71,7 @@ def text_to_image(args):
         cfg_scale=8,
         sampler_name="ddpm",
         n_inference_steps=20,
-        seed=42,
+        seeds=42,
         models=models,
         device=DEVICE,
         idle_device="cpu",
@@ -110,7 +110,7 @@ def inpainting(args):
         cfg_scale=8,
         sampler_name="ddpm",
         n_inference_steps=20,
-        seed=42,
+        seeds=42,
         models=models,
         device=DEVICE,
         idle_device="cpu",
@@ -128,7 +128,7 @@ def controlnet(args):
     diffusion_state_dict = torch.load(os.path.join(args.root_path,"favorfit_base.pth"))
     control_state_dict = torch.load(os.path.join(args.root_path,"controlnet","outpaint_v2.pth"))   
 
-    kwargs = {"is_controlnet":True, "controlnet_scale":1.0}
+    kwargs = {"is_controlnet":True}
     models = model_loader.load_diffusion_model(diffusion_state_dict, **kwargs)
     controlnet = model_loader.load_controlnet_model(control_state_dict)
 
@@ -149,10 +149,11 @@ def controlnet(args):
         n_inference_steps=20,
         strength=1.0,
         models=models,
-        seed=12345,
+        seeds=12345,
         device=DEVICE,
         idle_device="cpu",
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        controlnet_scale=1.0
     )
 
     output_image_pil = Image.fromarray(output_image)
@@ -167,7 +168,7 @@ def lora(args):
     lora_state_dict = torch.load(os.path.join(args.root_path,"lora","favorfit_lora.pth"))   
     diffusion_state_dict["lora"] = lora_state_dict
 
-    kwargs = {"is_lora":True, "lora_scale":1.0}
+    kwargs = {"is_lora":True}
     models = model_loader.load_diffusion_model(diffusion_state_dict, **kwargs)
 
     from pipelines.pipeline_default import generate
@@ -179,11 +180,12 @@ def lora(args):
         cfg_scale=8,
         sampler_name="ddpm",
         n_inference_steps=20,
-        seed=42,
+        seeds=42,
         models=models,
         device=DEVICE,
         idle_device="cpu",
         tokenizer=tokenizer,
+        lora_scale=1.0,
     )
 
     output_image_pil = Image.fromarray(output_image)

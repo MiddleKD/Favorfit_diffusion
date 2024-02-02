@@ -45,9 +45,9 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
 from models.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
 
-def load_controlnet_model(state_dict=None, dtype=torch.float16):
+def load_controlnet_model(state_dict=None, dtype=torch.float16, **kwargs):
     
-    controlnet = Controlnet(4).to(dtype)
+    controlnet = Controlnet(4, **kwargs).to(dtype)
     controlnet_embedding = ControlNetConditioningEmbedding(320, 3).to(dtype)
     
     if state_dict is not None:

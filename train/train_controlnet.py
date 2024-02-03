@@ -149,14 +149,14 @@ def load_models(args):
     tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
 
     from utils.model_loader import load_diffusion_model
-    kwargs = {"is_controlnet":True, "global_mean_pooling":args.global_mean_pooling}
+    
     if args.diffusion_model_path is not None:
         diffusion_state_dict = torch.load(args.diffusion_model_path)
 
         if "diffusion" not in diffusion_state_dict.keys():
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
-    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **kwargs)
+    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_controlnet":True})
 
     from utils.model_loader import load_controlnet_model
     control_state_dict = None
@@ -166,7 +166,7 @@ def load_models(args):
         if "controlnet" not in control_state_dict.keys():
             from utils.model_converter import convert_controlnet_model
             control_state_dict = convert_controlnet_model(control_state_dict)
-    controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32)
+    controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32, **{"global_mean_pooling":args.global_mean_pooling})
     models.update(controlnet)
 
     return models, tokenizer

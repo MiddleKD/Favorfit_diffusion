@@ -174,7 +174,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
             leave_tqdm=False
         )
 
-        images = [Image.fromarray(output_image) for output_image in output_images]
+        images = output_images
 
         for image in images:
             image_logs.append(

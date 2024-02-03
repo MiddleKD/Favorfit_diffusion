@@ -297,7 +297,7 @@ class UNET(nn.Module):
             skip_connections.append(x)
 
         x = self.bottleneck(x, context, time)
-
+    
         if additional_down_conditions is None and additional_mid_conditions is None:
             for layers in self.decoders:
                 # Since we always concat with the skip connection of the encoder, the number of features increases before being sent to the decoder's layer

@@ -1,13 +1,10 @@
 import torch
 import numpy as np
+from PIL import Image
 from tqdm import tqdm
 from models.scheduler.ddpm import DDPMSampler
-from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes
+from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes, prepare_latent_width_height
 
-WIDTH = 512
-HEIGHT = 512
-LATENTS_WIDTH = WIDTH // 8
-LATENTS_HEIGHT = HEIGHT // 8
 
 def generate(
     prompt,
@@ -28,7 +25,9 @@ def generate(
     leave_tqdm=True,
     controlnet_scale=1.0,
     **kwargs
-):
+):  
+    ORIGIN_WIDTH, ORIGIN_HEIGHTS, WIDTH, HEIGHT, LATENTS_WIDTH, LATENTS_HEIGHT = prepare_latent_width_height([input_image, control_image])
+
     with torch.no_grad():
         dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
 
@@ -209,7 +208,7 @@ def generate(
             if do_cfg:
                 # (Batch_Size, 4, Latents_Height, Latents_Width) -> (2 * Batch_Size, 4, Latents_Height, Latents_Width)
                 model_input = model_input.repeat(2, 1, 1, 1)
-
+            
             # model_output is the predicted noise
             # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
             model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]),
@@ -246,4 +245,4 @@ def generate(
         images = images.permute(0, 2, 3, 1)
         images = images.to("cpu", torch.uint8).numpy()
 
-        return images
+        return [Image.fromarray(image).resize([ORIGIN_WIDTH, ORIGIN_HEIGHTS]) for image in images]

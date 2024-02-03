@@ -1,6 +1,32 @@
 import json
 import torch
 import numpy as np
+from typing import Union
+
+def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Union[list, None]=None):
+    if explicitly_define_size:
+        WIDTH, HEIGHT = explicitly_define_size
+        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
+        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+        return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
+
+    image_sizes = [pil_image.size for pil_image in pil_image_list if pil_image is not None]
+    
+    if len(image_sizes) == 0:
+        WIDTH, HEIGHT = (512, 512)
+        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
+        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+        return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
+
+    if not all(size == image_sizes[0] for size in image_sizes):
+        raise ValueError("All image must have same size")
+            
+    WIDTH, HEIGHT = image_sizes[0]
+    LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
+    LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+
+    return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
+
 
 def rescale(x, old_range, new_range, clamp=False):
     x = x.to(dtype=torch.float16)

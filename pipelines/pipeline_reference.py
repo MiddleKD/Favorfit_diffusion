@@ -226,8 +226,9 @@ def generate(
             latents = sampler.step(timestep, latents, model_output)
 
         to_idle(diffusion)
-        for controlnet_model in controlnet_models:
-            to_idle(controlnet_model)
+        if control_image is not None:
+            for controlnet_model in controlnet_models:
+                to_idle(controlnet_model)
 
         # LOOP end
 

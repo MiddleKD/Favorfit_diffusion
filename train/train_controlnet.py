@@ -426,7 +426,7 @@ def main(args):
             lr=1e-06,
             betas=(0.9, 0.999),
             weight_decay=1e-2,
-            eps=5e-07,
+            eps=1e-08,
         )
         from models.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
         lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)

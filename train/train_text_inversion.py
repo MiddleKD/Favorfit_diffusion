@@ -78,6 +78,10 @@ def parse_args():
         default=1e-5,
     )
     parser.add_argument(
+        "--use_lr_scheduler",
+        action="store_true",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -280,7 +284,7 @@ def train(accelerator,
                                     accelerator,
                                     args)
 
-            logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            logs = {"loss": loss.detach().item(), "lr": optimizer.param_groups[0]['lr']}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
         
@@ -356,28 +360,28 @@ def main(args):
     params_to_optimize = list(clip.parameters())
     if args.lora == True:
         params_to_optimize += list(lora_wrapper_model.parameters())
-    optimizer = AdamW(
+    
+    
+    if args.use_lr_scheduler:
+        optimizer = AdamW(
             params_to_optimize,
-            lr=args.lr,
+            lr=1e-06,
             betas=(0.9, 0.999),
             weight_decay=1e-2,
-            eps=1e-08,
+            eps=5e-07,
         )
-
-    from torch.optim.lr_scheduler import LambdaLR
-    lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
-
-    # from torch.optim import AdamW
-    # from lr_scheduler.lr_scheduler import CosineAnnealingWarmUpRestarts
-    # params_to_optimize = list(embedding.parameters()) + list(embedding_ts.parameters()) + list(lora_wrapper_model.parameters())
-    # optimizer = AdamW(
-    #         params_to_optimize,
-    #         lr=1e-06,
-    #         betas=(0.9, 0.999),
-    #         weight_decay=1e-2,
-    #         eps=1e-06,
-    #     )
-    # lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=2, eta_max=args.lr,  T_up=20, gamma=0.5)
+        from models.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
+        lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)
+    else:
+        optimizer = AdamW(
+                params_to_optimize,
+                lr=args.lr,
+                betas=(0.9, 0.999),
+                weight_decay=1e-2,
+                eps=1e-08,
+            )
+        from torch.optim.lr_scheduler import LambdaLR
+        lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
 
     
     from models.scheduler.ddpm import DDPMSampler

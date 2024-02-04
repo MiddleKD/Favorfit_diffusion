@@ -41,7 +41,7 @@ class CLIPImageEncoder(nn.Module):
 
         self.image_preprocessor = CLIPImagePreprocessor()
         if from_pretrained==True:
-            self.clip_image_encoder = CLIPVisionModel.from_pretrained( "openai/clip-vit-base-patch32", cache_dir="./data") 
+            self.clip_image_encoder = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32", cache_dir="./data/clip_image_encoder")
         else:
             self.clip_image_encoder = CLIPVisionModel(CLIPVisionConfig())
 

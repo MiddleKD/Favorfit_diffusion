@@ -74,6 +74,10 @@ def parse_args():
         default=1e-5,
     )
     parser.add_argument(
+        "--use_lr_scheduler",
+        action="store_true",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -86,7 +90,7 @@ from models.clip.clip_image_encoder import CLIPImagePreprocessor
 def make_train_dataset(path, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, reference_column, text_column = column_names
+    image_column, reference_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -129,7 +133,7 @@ def load_models(args):
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
             
-    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"clip_image_encoder":True, "clip_dtype":torch.float32})
+    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"clip_image_encoder":True, "clip_image_encoder_from_pretrained":True, "clip_dtype":torch.float32})
 
     return models
 
@@ -160,7 +164,7 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
                 sampler_name="ddpm",
                 n_inference_steps=20,
                 models=models,
-                seeds=[12345, 42, 110],
+                seeds=[42, 110, 320],
                 device=accelerator.device,
                 idle_device="cuda",
                 leave_tqdm=False
@@ -180,8 +184,9 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
 
             for log in image_logs:
                 image = log["images"]
-                validation_prompt = log["validation_prompts"]
-                formatted_images.append(wandb.Image(image, caption=validation_prompt))
+                validation_image = log["validation_image"]
+                formatted_images.append(wandb.Image(validation_image, caption="reference"))
+                formatted_images.append(wandb.Image(image, caption="generated_image"))                
 
             tracker.log({"validation": formatted_images})
 
@@ -273,7 +278,7 @@ def train(accelerator,
                                     accelerator,
                                     args)
 
-            logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            logs = {"loss": loss.detach().item(), "lr": optimizer.param_groups[0]['lr']}
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
         
@@ -335,16 +340,28 @@ def main(args):
     from torch.optim import AdamW
 
     params_to_optimize = list(clip.parameters())
-    optimizer = AdamW(
+
+    
+    if args.use_lr_scheduler:
+        optimizer = AdamW(
             params_to_optimize,
-            lr=args.lr,
+            lr=1e-06,
             betas=(0.9, 0.999),
             weight_decay=1e-2,
-            eps=1e-08,
+            eps=5e-07,
         )
-
-    from torch.optim.lr_scheduler import LambdaLR
-    lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
+        from models.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
+        lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)
+    else:
+        optimizer = AdamW(
+                params_to_optimize,
+                lr=args.lr,
+                betas=(0.9, 0.999),
+                weight_decay=1e-2,
+                eps=1e-08,
+            )
+        from torch.optim.lr_scheduler import LambdaLR
+        lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
     
     from models.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)

@@ -115,7 +115,7 @@ class Controlnet(nn.Module):
             zero_module(nn.Conv2d(1280, 1280, kernel_size=1, padding="valid")),
         ])
 
-    def forward(self, original_sample, latent, context, time):
+    def forward(self, original_sample, latent, context, time, controlnet_scale=1.0):
         time = self.time_embed(time)
         
         sample = self.encoders[0](original_sample, context, time)
@@ -141,4 +141,4 @@ class Controlnet(nn.Module):
         controlnet_downs = controlnet_outs[::-1]
         controlnet_mids = [latent]
         
-        return controlnet_downs, controlnet_mids
+        return [cur*controlnet_scale for cur in controlnet_downs], [cur*controlnet_scale for cur in controlnet_mids]

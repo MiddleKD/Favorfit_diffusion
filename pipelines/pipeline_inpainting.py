@@ -25,9 +25,13 @@ def generate(
     leave_tqdm=True,
     **kwargs
 ):
+    # make latent shape base on input image
     ORIGIN_WIDTH, ORIGIN_HEIGHTS, WIDTH, HEIGHT, LATENTS_WIDTH, LATENTS_HEIGHT = prepare_latent_width_height([input_image, mask_image])
+    latents_shape = (1, 4, LATENTS_HEIGHT, LATENTS_WIDTH)
 
     with torch.no_grad():
+
+        # prepare model type
         dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
 
         if not 0 < strength <= 1:
@@ -38,7 +42,8 @@ def generate(
         else:
             to_idle = lambda x: x
 
-        # For batch-----
+        
+        # check seeds
         generators = [torch.Generator(device=device) for _ in range(num_per_image)]
         
         if isinstance(seeds,int):
@@ -53,80 +58,61 @@ def generate(
         else:
             for generator, seed in zip(generators, seeds):
                 generator.manual_seed(seed)
-        # For batch-----
 
-        clip = models["clip"]
-        clip.to(device)
-        
-        if do_cfg:
-            # Convert into a list of length Seq_Len=77
-            cond_tokens = tokenizer.batch_encode_plus(
-                [prompt], padding="max_length", max_length=77
-            ).input_ids
-            # (Batch_Size, Seq_Len)
-            cond_tokens = torch.tensor(cond_tokens, dtype=torch.long, device=device)
-            # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
-            cond_context = clip(cond_tokens)
-            # Convert into a list of length Seq_Len=77
-            uncond_tokens = tokenizer.batch_encode_plus(
-                [uncond_prompt], padding="max_length", max_length=77
-            ).input_ids
-            # (Batch_Size, Seq_Len)
-            uncond_tokens = torch.tensor(uncond_tokens, dtype=torch.long, device=device)
-            # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
-            uncond_context = clip(uncond_tokens)
-            # (Batch_Size, Seq_Len, Dim) + (Batch_Size, Seq_Len, Dim) -> (2 * Batch_Size, Seq_Len, Dim)
-            context = torch.cat([cond_context, uncond_context])
 
-            # For batch-----
-            context = context.repeat_interleave(num_per_image, dim=0)
-            # For batch-----
-
-        else:
-            # Convert into a list of length Seq_Len=77
-            tokens = tokenizer.batch_encode_plus(
-                [prompt], padding="max_length", max_length=77
-            ).input_ids
-            # (Batch_Size, Seq_Len)
-            tokens = torch.tensor(tokens, dtype=torch.long, device=device)
-            # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
-            context = clip(tokens)
-
-            # For batch-----
-            context = context.repeat_interleave(num_per_image, dim=0)
-            # For batch-----
-        to_idle(clip)
-
+        # prepare scheduler 
         if sampler_name == "ddpm":
-            # For batch-----
             samplers = []
             for generator in generators:
                 sampler = DDPMSampler(generator)
                 sampler.set_inference_timesteps(n_inference_steps)
                 samplers.append(sampler)
-            # For batch-----
         else:
             raise ValueError("Unknown sampler value %s. ")
 
-        latents_shape = (1, 4, LATENTS_HEIGHT, LATENTS_WIDTH)
 
+        # 1. CLIP forward
+        clip = models["clip"]
+        clip.to(device)
+        
+        if do_cfg:
+            cond_tokens = tokenizer.batch_encode_plus(
+                [prompt], padding="max_length", max_length=77
+            ).input_ids
+            cond_tokens = torch.tensor(cond_tokens, dtype=torch.long, device=device)
+            cond_context = clip(cond_tokens)
+            uncond_tokens = tokenizer.batch_encode_plus(
+                [uncond_prompt], padding="max_length", max_length=77
+            ).input_ids
+            uncond_tokens = torch.tensor(uncond_tokens, dtype=torch.long, device=device)
+            uncond_context = clip(uncond_tokens)
+            context = torch.cat([cond_context, uncond_context])
+            context = context.repeat_interleave(num_per_image, dim=0)
+        else:
+            tokens = tokenizer.batch_encode_plus(
+                [prompt], padding="max_length", max_length=77
+            ).input_ids
+            tokens = torch.tensor(tokens, dtype=torch.long, device=device)
+            context = clip(tokens)
+            context = context.repeat_interleave(num_per_image, dim=0)
+        to_idle(clip)
+
+        
+        # 2. make latents(forward VAE encoder)
         if input_image:
+
+            # 2-1. prepre input image
             encoder = models["encoder"]
             encoder.to(device)
 
             input_image_tensor = input_image.resize((WIDTH, HEIGHT))
-            # (Height, Width, Channel)
             input_image_tensor = np.array(input_image_tensor)
-            # (Height, Width, Channel) -> (Height, Width, Channel)
             input_image_tensor = torch.tensor(input_image_tensor)
-            # (Height, Width, Channel) -> (Height, Width, Channel)
+
             input_image_tensor = rescale(input_image_tensor, (0, 255), (-1, 1))
-            # (Height, Width, Channel) -> (Batch_Size, Height, Width, Channel)
             input_image_tensor = input_image_tensor.unsqueeze(0)
-            # (Batch_Size, Height, Width, Channel) -> (Batch_Size, Channel, Height, Width)
             input_image_tensor = input_image_tensor.permute(0, 3, 1, 2).to(device)
 
-            # For batch-----
             input_image_tensor = input_image_tensor.repeat_interleave(num_per_image, dim=0)
             
             encoder_noise = torch.cat([torch.randn(latents_shape, 
@@ -146,55 +132,51 @@ def generate(
                 latent = sampler.add_noise(latent, sampler.timesteps[0])
                 latents.append(latent)
             latents = torch.cat(latents)
-            # For batch-----
-
-            input_image_np = input_image.resize((WIDTH, HEIGHT))
-            input_image_np = np.array(input_image_np)
             
+            # 2-2. prepre mask
             mask_from_pil = torch.from_numpy(np.array(mask_image) / 255.0)
             mask_from_pil = mask_from_pil.unsqueeze(-1).unsqueeze(0).permute(0, 3, 1, 2)
             mask = torch.nn.functional.interpolate(mask_from_pil, size=(WIDTH//8, HEIGHT//8))
             mask = mask.to(device)
             
-            # For batch-----
             mask = mask.repeat_interleave(num_per_image, dim=0)
-            # For batch-----
-            
+
+            # 2-3. prepre masked image
+            input_image_np = input_image.resize((WIDTH, HEIGHT))
+            input_image_np = np.array(input_image_np)
+
             mask_condition = np.array(mask_image.resize((WIDTH, HEIGHT)))
             masked_image_tensor = rescale(torch.tensor(input_image_np), (0, 255), (-1, 1)).numpy() * (mask_condition[:,:,None] < 100)
-
             masked_image_tensor = torch.tensor(masked_image_tensor)
-            # (Height, Width, Channel) -> (Batch_Size, Height, Width, Channel)
             masked_image_tensor = masked_image_tensor.unsqueeze(0)
-            # (Batch_Size, Height, Width, Channel) -> (Batch_Size, Channel, Height, Width)
             masked_image_tensor = masked_image_tensor.permute(0, 3, 1, 2).to(device)
 
-            # (Batch_Size, 4, Latents_Height, Latents_Width)
             masked_image_latents = encoder(masked_image_tensor, encoder_noise)
 
             to_idle(encoder)
         else:
-            # For batch-----
             latents = torch.cat([torch.randn(latents_shape, 
                                             generator=generator, 
                                             device=device) 
                                             for generator in generators]
                                 )
-            # For batch-----
         
+
+        # 3. DENOISING LOOP forward
         diffusion = models["diffusion"]
         diffusion.to(device)
 
+        # LOOP start
         timesteps = tqdm(sampler.timesteps, leave=leave_tqdm)
         for i, timestep in enumerate(timesteps):
-            # (1, 320)
+
+            # prepare time step embedding
             time_embedding = get_time_embedding(timestep).to(device)
 
-            # (Batch_Size, 4, Latents_Height, Latents_Width)
             model_input = latents
 
+            # 3-1. UNET forward
             if do_cfg:
-                # (Batch_Size, 4, Latents_Height, Latents_Width) -> (2 * Batch_Size, 4, Latents_Height, Latents_Width)
                 model_input = torch.cat([model_input.repeat(2, 1, 1, 1), 
                                          mask.repeat(2, 1, 1, 1), 
                                          masked_image_latents.repeat(2, 1, 1, 1)], 
@@ -205,30 +187,35 @@ def generate(
                                          masked_image_latents], 
                                          dim=1)
             
-            # model_output is the predicted noise
-            # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
             model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]), 
                                      context.to(dtype=dtype_map["diffusion"]), 
                                      time_embedding.to(dtype=dtype_map["diffusion"]),
-                                     **kwargs)
+                                     **kwargs
+            )
 
             if do_cfg:
                 output_cond, output_uncond = model_output.chunk(2)
                 model_output = cfg_scale * (output_cond - output_uncond) + output_uncond
 
-            # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
+            # 3-2. scheduler step
             latents = sampler.step(timestep, latents, model_output)
 
         to_idle(diffusion)
+        
+        # LOOP end
 
+
+        # 5. VAE decoder forward
         decoder = models["decoder"]
         decoder.to(device)
-        # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 3, Height, Width)
+        
         images = decoder(latents.to(dtype=dtype_map["decoder"]))
+        
         to_idle(decoder)
 
+
+        # 6. prepare outputs
         images = rescale(images, (-1, 1), (0, 255), clamp=True)
-        # (Batch_Size, Channel, Height, Width) -> (Batch_Size, Height, Width, Channel)
         images = images.permute(0, 2, 3, 1)
         images = images.to("cpu", torch.uint8).numpy()
         

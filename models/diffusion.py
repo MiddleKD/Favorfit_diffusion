@@ -348,19 +348,13 @@ class Diffusion(nn.Module):
         time = self.time_embedding(time)
 
         # (Batch, 4, Height / 8, Width / 8) -> (Batch, 320, Height / 8, Width / 8)
-        if self.is_controlnet == True:
-            if kwargs.get("controlnet_scale") is not None:
-                self.controlnet_scale = kwargs.get("controlnet_scale")
-            else:
-                self.controlnet_scale = 1.0
-            
+        if self.is_controlnet == True:            
             controlnet_downs, controlnet_mids = additional_res_condition
             output = self.unet(x=latent, 
                                context=context, 
                                time=time, 
                                additional_down_conditions=controlnet_downs, 
                                additional_mid_conditions=controlnet_mids,
-                               additional_condition_scale=self.controlnet_scale, 
                                **kwargs)
         else:
             output = self.unet(x=latent, 

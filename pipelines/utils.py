@@ -10,7 +10,15 @@ def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Unio
         LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
         return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
 
-    image_sizes = [pil_image.size for pil_image in pil_image_list if pil_image is not None]
+    image_sizes = []
+    for pil_image in pil_image_list:
+        if isinstance(pil_image, list):
+            for cur in pil_image:
+                if pil_image is not None:
+                    image_sizes.append(cur.size)
+        else:
+            if pil_image is not None:
+                image_sizes.append(pil_image.size)
     
     if len(image_sizes) == 0:
         WIDTH, HEIGHT = (512, 512)
@@ -54,6 +62,8 @@ def get_model_weights_dtypes(models_wrapped_dict, verbose=False):
     
     model_dtype_map = {}
     for name, model in models_wrapped_dict.items():
+        if isinstance(model, list):
+            model = model[0]
         first_param = next(model.parameters())
         model_dtype_map[name] = first_param.dtype
     

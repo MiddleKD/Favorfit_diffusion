@@ -340,15 +340,13 @@ class Diffusion(nn.Module):
         self.time_embedding = TimeEmbedding(320)
         self.unet = UNET(in_channels=in_channels, **kwargs)
         self.final = UNET_OutputLayer(320, 4)
-
-        self.is_controlnet = kwargs.get('is_controlnet')
     
     def forward(self, latent, context, time, additional_res_condition=None, **kwargs):
 
         time = self.time_embedding(time)
 
         # (Batch, 4, Height / 8, Width / 8) -> (Batch, 320, Height / 8, Width / 8)
-        if self.is_controlnet == True:            
+        if additional_res_condition is not None:            
             controlnet_downs, controlnet_mids = additional_res_condition
             output = self.unet(x=latent, 
                                context=context, 

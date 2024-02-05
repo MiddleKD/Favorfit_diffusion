@@ -128,8 +128,7 @@ def controlnet(args):
     diffusion_state_dict = torch.load(os.path.join(args.root_path,"favorfit_base.pth"))
     control_state_dict = torch.load(os.path.join(args.root_path,"controlnet","outpaint_v2.pth"))   
 
-    kwargs = {"is_controlnet":True}
-    models = model_loader.load_diffusion_model(diffusion_state_dict, **kwargs)
+    models = model_loader.load_diffusion_model(diffusion_state_dict)
     controlnet = model_loader.load_controlnet_model(control_state_dict)
 
     models.update(controlnet)

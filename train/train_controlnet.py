@@ -160,7 +160,7 @@ def load_models(args):
         if "diffusion" not in diffusion_state_dict.keys():
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
-    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_controlnet":True})
+    models = load_diffusion_model(diffusion_state_dict, dtype=precison)
 
     from utils.model_loader import load_controlnet_model
     control_state_dict = None

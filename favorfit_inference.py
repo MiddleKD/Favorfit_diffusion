@@ -1,53 +1,66 @@
 import os
-from PIL import Image
-from typing import Union, List, Tuple, Dict
+from typing import Union, List, Dict
 
 from transformers import CLIPTokenizer
 from pipelines import pipeline_default, pipline_default_controlnet
 from utils.model_loader import *
 
 
-default_uncond_prompt = "low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey"
-
-
-def load_model(
+# Call model
+def call_diffusion_model(
         diffusion_state_dict_path: str,
-        control_state_dict_path: Union[str, List[str], None] = None,
         lora_state_dict_path: Union[str, None] = None,
-)-> Tuple[CLIPTokenizer, Dict]:
+)-> Dict:
     
-    cur_dir = os.path.dirname(os.path.realpath(__file__))
-    tokenizer = CLIPTokenizer(vocab_file=os.path.join(cur_dir, "data/vocab.json"), 
-                            merges_file=os.path.join(cur_dir, "data/merges.txt"))
-    
-    kwargs = {"is_controlnet": True if control_state_dict_path is not None else False,
-              "is_lora": True if lora_state_dict_path is not None else False,
+    kwargs = {"is_lora": True if lora_state_dict_path is not None else False,
               "is_inpaint": True if "inpaint" in diffusion_state_dict_path else False}
     
-
     diffusion_state_dict = torch.load(diffusion_state_dict_path)
 
     if lora_state_dict_path is not None:
         lora_state_dict = torch.load(lora_state_dict_path)
         diffusion_state_dict["lora"] = lora_state_dict
-    
-    if control_state_dict_path is not None:
-        control_state_dict_list = []
-        if not isinstance(control_state_dict_path, list):
-            control_state_dict_list = [control_state_dict_path]
-        for cur in control_state_dict_path:
-            control_state_dict_list.append(torch.load(cur))
-    
 
     models = load_diffusion_model(diffusion_state_dict, **kwargs)
 
-    if control_state_dict_path is not None:
-        controlnet = load_controlnet_model(control_state_dict_list)
-        models.update(controlnet)
+    return models
 
-    return tokenizer, models
+def call_tokenizer()-> CLIPTokenizer:
+    
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    tokenizer = CLIPTokenizer(vocab_file=os.path.join(cur_dir, "data/vocab.json"), 
+                            merges_file=os.path.join(cur_dir, "data/merges.txt"))
+
+    return tokenizer
+
+def call_controlnet_model(
+        control_state_dict_path: Union[str, List[str], None] = None,
+)-> Dict:
+    
+    control_state_dict_list = []
+    if not isinstance(control_state_dict_path, list):
+        control_state_dict_list = [control_state_dict_path]
+    for cur in control_state_dict_path:
+        control_state_dict_list.append(torch.load(cur))
+    
+    controlnet = load_controlnet_model(control_state_dict_list)
+
+    return controlnet
+
+def make_multi_controlnet_model(
+        controlnet_model_list
+)-> Dict:
+    
+    outputs_controlnet_model_dict={"controlnet":[], "controlnet_embedding":[]}
+    for controlnet_model_dict in controlnet_model_list:
+        outputs_controlnet_model_dict["controlnet"].append(controlnet_model_dict["controlnet"])
+        outputs_controlnet_model_dict["controlnet_embedding"].append(controlnet_model_dict["controlnet_embedding"])
+    
+    return outputs_controlnet_model_dict
 
 
+# inference pipeline
+default_uncond_prompt = "low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey"
 
 def text_to_image(
         prompt,

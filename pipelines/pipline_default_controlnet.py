@@ -44,7 +44,9 @@ def generate(
         # check seeds
         generators = [torch.Generator(device=device) for _ in range(num_per_image)]
         
-        if isinstance(seeds,int):
+        if seeds == -1:
+            seeds = None
+        elif isinstance(seeds,int):
             seeds = [seeds]*num_per_image
         elif len(seeds) != num_per_image: 
             print("length do not match. seeds set to None.")

@@ -3,12 +3,12 @@ import torch
 import numpy as np
 from typing import Union
 
-def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Union[list, None]=None):
+def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Union[list, None]=None, vae_scale=8):
     if explicitly_define_size:
         WIDTH, HEIGHT = explicitly_define_size
-        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
-        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
-        return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
+        LATENTS_WIDTH = (WIDTH // vae_scale) + (-(WIDTH // vae_scale) % vae_scale if (WIDTH // vae_scale) % vae_scale < vae_scale/2 else (vae_scale - (WIDTH // vae_scale) % vae_scale))
+        LATENTS_HEIGHT = (HEIGHT // vae_scale) + (-(HEIGHT // vae_scale) % vae_scale if (HEIGHT // vae_scale) % vae_scale < vae_scale/2 else (vae_scale - (HEIGHT // vae_scale) % vae_scale))
+        return WIDTH, HEIGHT, LATENTS_WIDTH*vae_scale, LATENTS_HEIGHT*vae_scale, LATENTS_WIDTH, LATENTS_HEIGHT
 
     image_sizes = []
     for pil_image in pil_image_list:
@@ -22,18 +22,18 @@ def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Unio
     
     if len(image_sizes) == 0:
         WIDTH, HEIGHT = (512, 512)
-        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
-        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
-        return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
+        LATENTS_WIDTH = (WIDTH // vae_scale) + (-(WIDTH // vae_scale) % vae_scale if (WIDTH // vae_scale) % vae_scale < vae_scale/2 else (vae_scale - (WIDTH // vae_scale) % vae_scale))
+        LATENTS_HEIGHT = (HEIGHT // vae_scale) + (-(HEIGHT // vae_scale) % vae_scale if (HEIGHT // vae_scale) % vae_scale < vae_scale/2 else (vae_scale - (HEIGHT // vae_scale) % vae_scale))
+        return WIDTH, HEIGHT, LATENTS_WIDTH*vae_scale, LATENTS_HEIGHT*vae_scale, LATENTS_WIDTH, LATENTS_HEIGHT
 
     if not all(size == image_sizes[0] for size in image_sizes):
         raise ValueError("All image must have same size")
             
     WIDTH, HEIGHT = image_sizes[0]
-    LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
-    LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+    LATENTS_WIDTH = (WIDTH // vae_scale) + (-(WIDTH // vae_scale) % vae_scale if (WIDTH // vae_scale) % vae_scale < vae_scale/2 else (vae_scale - (WIDTH // vae_scale) % vae_scale))
+    LATENTS_HEIGHT = (HEIGHT // vae_scale) + (-(HEIGHT // vae_scale) % vae_scale if (HEIGHT // vae_scale) % vae_scale < vae_scale/2 else (vae_scale - (HEIGHT // vae_scale) % vae_scale))
 
-    return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
+    return WIDTH, HEIGHT, LATENTS_WIDTH*vae_scale, LATENTS_HEIGHT*vae_scale, LATENTS_WIDTH, LATENTS_HEIGHT
 
 
 def rescale(x, old_range, new_range, clamp=False):

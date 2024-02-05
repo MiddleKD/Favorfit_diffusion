@@ -6,8 +6,8 @@ from typing import Union
 def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Union[list, None]=None):
     if explicitly_define_size:
         WIDTH, HEIGHT = explicitly_define_size
-        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
-        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 8
+        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 8
         return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
 
     image_sizes = []
@@ -22,16 +22,16 @@ def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Unio
     
     if len(image_sizes) == 0:
         WIDTH, HEIGHT = (512, 512)
-        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
-        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+        LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 8
+        LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 8
         return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
 
     if not all(size == image_sizes[0] for size in image_sizes):
         raise ValueError("All image must have same size")
             
     WIDTH, HEIGHT = image_sizes[0]
-    LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 2
-    LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 2
+    LATENTS_WIDTH = (WIDTH // 8) + (WIDTH // 8) % 8
+    LATENTS_HEIGHT = (HEIGHT // 8) + (HEIGHT // 8) % 8
 
     return WIDTH, HEIGHT, LATENTS_WIDTH*8, LATENTS_HEIGHT*8, LATENTS_WIDTH, LATENTS_HEIGHT
 

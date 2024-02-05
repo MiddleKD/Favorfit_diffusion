@@ -1,13 +1,52 @@
 import os
 from PIL import Image
+from typing import Union, List, Tuple, Dict
 
 from transformers import CLIPTokenizer
 from pipelines import pipeline_default, pipline_default_controlnet
+from utils.model_loader import *
 
-cur_dir = os.path.dirname(os.path.realpath(__file__))
-tokenizer = CLIPTokenizer(vocab_file=os.path.join(cur_dir, "data/vocab.json"), 
-                          merges_file=os.path.join(cur_dir, "data/merges.txt"))
+
 default_uncond_prompt = "low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey"
+
+
+def load_model(
+        diffusion_state_dict_path: str,
+        control_state_dict_path: Union[str, List[str], None],
+        lora_state_dict_path: Union[str, None],
+)-> Tuple[CLIPTokenizer, Dict]:
+    
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    tokenizer = CLIPTokenizer(vocab_file=os.path.join(cur_dir, "data/vocab.json"), 
+                            merges_file=os.path.join(cur_dir, "data/merges.txt"))
+    
+    kwargs = {"is_controlnet": True if control_state_dict_path is not None else False,
+              "is_lora": True if lora_state_dict_path is not None else False,
+              "is_inpaint": True if "inpaint" in diffusion_state_dict_path else False}
+    
+
+    diffusion_state_dict = torch.load(diffusion_state_dict_path)
+
+    if lora_state_dict_path is not None:
+        lora_state_dict = torch.load(lora_state_dict_path)
+        diffusion_state_dict["lora"] = lora_state_dict
+    
+    if control_state_dict_path is not None:
+        control_state_dict_list = []
+        if not isinstance(control_state_dict_path, list):
+            control_state_dict_list = [control_state_dict_path]
+        for cur in control_state_dict_path:
+            control_state_dict_list.append(torch.load(cur))
+    
+
+    models = load_diffusion_model(diffusion_state_dict, **kwargs)
+
+    if control_state_dict_path is not None:
+        controlnet = load_controlnet_model(control_state_dict_list)
+        models.update(controlnet)
+
+    return tokenizer, models
+
 
 
 def text_to_image(
@@ -16,8 +55,9 @@ def text_to_image(
         num_per_image=1,
         lora_scale=0.7,
         models=None,
-        seeds=[], 
-        device="cpu"
+        seeds=[],
+        device="cpu",
+        tokenizer=None,
         ):
 
     output_images = pipeline_default.generate(
@@ -49,7 +89,8 @@ def image_to_image(
         lora_scale=0.7,
         models=None,
         seeds=[], 
-        device="cpu"
+        device="cpu",
+        tokenizer=None,
         ):
 
     output_images = pipeline_default.generate(
@@ -83,7 +124,8 @@ def text_to_image_controlnet(
         controlnet_scale=1.0,
         models=None,
         seeds=[], 
-        device="cpu"
+        device="cpu",
+        tokenizer=None,
         ):
 
     output_images = pipline_default_controlnet.generate(
@@ -121,7 +163,8 @@ def image_to_image_controlnet(
         controlnet_scale=1.0,
         models=None,
         seeds=[], 
-        device="cpu"
+        device="cpu",
+        tokenizer=None,
         ):
 
     output_images = pipline_default_controlnet.generate(
@@ -160,7 +203,8 @@ def inpainting_controlnet(
         controlnet_scale=1.0,
         models=None,
         seeds=[], 
-        device="cpu"
+        device="cpu",
+        tokenizer=None,
         ):
 
     output_images = pipline_default_controlnet.generate(

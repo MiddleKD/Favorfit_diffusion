@@ -12,8 +12,8 @@ default_uncond_prompt = "low quality, worst quality, wrinkled, deformed, distort
 
 def load_model(
         diffusion_state_dict_path: str,
-        control_state_dict_path: Union[str, List[str], None],
-        lora_state_dict_path: Union[str, None],
+        control_state_dict_path: Union[str, List[str], None] = None,
+        lora_state_dict_path: Union[str, None] = None,
 )-> Tuple[CLIPTokenizer, Dict]:
     
     cur_dir = os.path.dirname(os.path.realpath(__file__))
@@ -77,8 +77,7 @@ def text_to_image(
         lora_scale=lora_scale,
     )
 
-    output_images_pil = [Image.fromarray(output_image) for output_image in output_images]
-    return output_images_pil
+    return output_images
 
 
 def image_to_image(
@@ -110,8 +109,7 @@ def image_to_image(
         lora_scale=lora_scale,
     )
 
-    output_images_pil = [Image.fromarray(output_image) for output_image in output_images]
-    return output_images_pil
+    return output_images
 
 
 def text_to_image_controlnet(
@@ -148,8 +146,7 @@ def text_to_image_controlnet(
         controlnet_scale=controlnet_scale
     )
 
-    output_images_pil = [Image.fromarray(output_image) for output_image in output_images]
-    return output_images_pil
+    return output_images
 
 
 def image_to_image_controlnet(
@@ -187,8 +184,7 @@ def image_to_image_controlnet(
         controlnet_scale=controlnet_scale
     )
 
-    output_images_pil = [Image.fromarray(output_image) for output_image in output_images]
-    return output_images_pil
+    return output_images
 
 
 def inpainting_controlnet(
@@ -228,5 +224,4 @@ def inpainting_controlnet(
         controlnet_scale=controlnet_scale
     )
 
-    output_images_pil = [Image.fromarray(output_image) for output_image in output_images]
-    return output_images_pil
+    return output_images

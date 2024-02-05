@@ -39,7 +39,7 @@ def call_controlnet_model(
     
     control_state_dict_list = []
     if not isinstance(control_state_dict_path, list):
-        control_state_dict_list = [control_state_dict_path]
+        control_state_dict_path = [control_state_dict_path]
     for cur in control_state_dict_path:
         control_state_dict_list.append(torch.load(cur))
     

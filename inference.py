@@ -53,8 +53,8 @@ def make_multi_controlnet_model(
     
     outputs_controlnet_model_dict={"controlnet":[], "controlnet_embedding":[]}
     for controlnet_model_dict in controlnet_model_list:
-        outputs_controlnet_model_dict["controlnet"].append(controlnet_model_dict["controlnet"])
-        outputs_controlnet_model_dict["controlnet_embedding"].append(controlnet_model_dict["controlnet_embedding"])
+        outputs_controlnet_model_dict["controlnet"].append(*controlnet_model_dict["controlnet"])
+        outputs_controlnet_model_dict["controlnet_embedding"].append(*controlnet_model_dict["controlnet_embedding"])
     
     return outputs_controlnet_model_dict
 

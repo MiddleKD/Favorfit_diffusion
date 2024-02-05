@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from models.attention import SelfAttention
+from networks.attention import SelfAttention
 
 class VAE_AttentionBlock(nn.Module):
     def __init__(self, channels):

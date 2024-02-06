@@ -2,7 +2,7 @@ import os
 from typing import Union, List, Dict
 
 from transformers import CLIPTokenizer
-from pipelines import pipeline_default, pipline_default_controlnet
+from pipelines import pipeline_default, pipline_default_controlnet, pipeline_inpainting_controlnet
 from .utils.model_loader import *
 
 
@@ -177,7 +177,7 @@ def image_to_image_controlnet(
         tokenizer=None,
         ):
 
-    output_images = pipline_default_controlnet.generate(
+    output_images = pipeline_inpainting_controlnet.generate(
         prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=input_image,
@@ -216,7 +216,7 @@ def inpainting_controlnet(
         tokenizer=None,
         ):
 
-    output_images = pipline_default_controlnet.generate(
+    output_images = pipeline_inpainting_controlnet.generate(
         prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=input_image,

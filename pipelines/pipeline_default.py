@@ -76,12 +76,12 @@ def generate(
         
         if do_cfg:
             cond_tokens = tokenizer.batch_encode_plus(
-                [prompt], padding="max_length", max_length=77
+                [prompt], padding="max_length", max_length=77, truncation=True
             ).input_ids
             cond_tokens = torch.tensor(cond_tokens, dtype=torch.long, device=device)
             cond_context = clip(cond_tokens)
             uncond_tokens = tokenizer.batch_encode_plus(
-                [uncond_prompt], padding="max_length", max_length=77
+                [uncond_prompt], padding="max_length", max_length=77, truncation=True
             ).input_ids
             uncond_tokens = torch.tensor(uncond_tokens, dtype=torch.long, device=device)
             uncond_context = clip(uncond_tokens)
@@ -89,7 +89,7 @@ def generate(
             context = context.repeat_interleave(num_per_image, dim=0)
         else:
             tokens = tokenizer.batch_encode_plus(
-                [prompt], padding="max_length", max_length=77
+                [prompt], padding="max_length", max_length=77, truncation=True
             ).input_ids
             tokens = torch.tensor(tokens, dtype=torch.long, device=device)
             context = clip(tokens)

@@ -130,7 +130,7 @@ def make_train_dataset(path, tokenizer, accelerator):
 
         conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
         conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
-        tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77).input_ids
+        tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77, truncation=True).input_ids
        
         examples["pixel_values"] = images
         examples["conditioning_pixel_values"] = conditioning_images

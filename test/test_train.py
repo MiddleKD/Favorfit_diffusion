@@ -111,7 +111,7 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        tokenized_ids = tokenizer.batch_encode_plus(["pokemon "+cur for cur in examples[caption_column]], padding="max_length", max_length=77).input_ids
+        tokenized_ids = tokenizer.batch_encode_plus(["pokemon "+cur for cur in examples[caption_column]], padding="max_length", max_length=77, truncation=True).input_ids
         
         examples["pixel_values"] = images
         examples["input_ids"] = tokenized_ids

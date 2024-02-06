@@ -142,7 +142,7 @@ def generate(
             mask_image = mask_image.convert("L")
             mask_from_pil = torch.from_numpy(np.array(mask_image) / 255.0)
             mask_from_pil = mask_from_pil.unsqueeze(-1).unsqueeze(0).permute(0, 3, 1, 2)
-            mask = torch.nn.functional.interpolate(mask_from_pil, size=(WIDTH//8, HEIGHT//8))
+            mask = torch.nn.functional.interpolate(mask_from_pil, size=(LATENTS_WIDTH, LATENTS_HEIGHT))
             mask = mask.to(device)
             
             mask = mask.repeat_interleave(num_per_image, dim=0)

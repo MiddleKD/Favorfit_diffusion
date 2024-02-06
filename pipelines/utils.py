@@ -35,6 +35,16 @@ def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Unio
 
     return WIDTH, HEIGHT, LATENTS_WIDTH*vae_scale, LATENTS_HEIGHT*vae_scale, LATENTS_WIDTH, LATENTS_HEIGHT
 
+def check_prompt_text_length(prompt_list, max_length=77):
+    truncated_prompt_list = []
+    for prompt in prompt_list:
+        if isinstance(prompt, str):
+            if len(prompt) > max_length:
+                print(f"prompts is too long it will be truncated to {max_length} len")
+            truncated_prompt_list.append(prompt[:max_length])
+        else:
+            truncated_prompt_list.append(prompt)
+    return truncated_prompt_list
 
 def rescale(x, old_range, new_range, clamp=False):
     x = x.to(dtype=torch.float16)

@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 from networks.scheduler.ddpm import DDPMSampler
-from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes, prepare_latent_width_height
+from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes, prepare_latent_width_height, check_prompt_text_length
 
 
 def generate(
@@ -27,6 +27,8 @@ def generate(
     controlnet_scale=1.0,
     **kwargs
 ):
+    prompt, uncond_context = check_prompt_text_length([prompt, uncond_prompt])
+    
     # make latent shape base on input image
     ORIGIN_WIDTH, ORIGIN_HEIGHTS, WIDTH, HEIGHT, LATENTS_WIDTH, LATENTS_HEIGHT = prepare_latent_width_height([input_image, mask_image, control_image])
     latents_shape = (1, 4, LATENTS_HEIGHT, LATENTS_WIDTH)

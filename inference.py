@@ -177,7 +177,7 @@ def image_to_image_controlnet(
         tokenizer=None,
         ):
 
-    output_images = pipeline_inpainting_controlnet.generate(
+    output_images = pipline_default_controlnet.generate(
         prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=input_image,

@@ -21,13 +21,16 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
         if kwargs.get("clip_train") == True:
             if kwargs.get("clip_image_encoder") == True:
                 clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype=kwargs.get("clip_dtype"))
+                if isinstance(kwargs.get("clip_image_encoder_model_path"), str):
+                    clip.load_state_dict(torch.load(kwargs.get("clip_image_encoder_model_path")), strict=True)
             else:
                 clip = CLIP(n_vocab=49408).to(dtype=kwargs.get("clip_dtype"))
                 clip.load_state_dict(state_dict['clip'], strict=True)
         else:
             if kwargs.get("clip_image_encoder") == True:
                 clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype)
-                # clip.load_state_dict(state_dict['clip'], strict=True)
+                if isinstance(kwargs.get("clip_image_encoder_model_path"), str):
+                    clip.load_state_dict(torch.load(kwargs.get("clip_image_encoder_model_path")), strict=True)
             else:
                 clip = CLIP(n_vocab=49408).to(dtype)
                 clip.load_state_dict(state_dict['clip'], strict=True)

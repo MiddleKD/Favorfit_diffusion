@@ -20,6 +20,11 @@ def parse_args():
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
     )
     parser.add_argument(
+        "--clip_image_encoder_model_path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
         "--unet",
         action="store_true",
     )
@@ -147,6 +152,7 @@ def load_models(args):
                                                                             "clip_train":True if args.clip == True else None,
                                                                             "clip_image_encoder":True,
                                                                             "clip_image_encoder_from_pretrained":True,
+                                                                            "clip_image_encoder_model_path":args.clip_image_encoder_model_path,
                                                                             "clip_dtype":torch.float32 if args.clip == True else precison,})
 
     return models

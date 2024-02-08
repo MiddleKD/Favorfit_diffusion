@@ -20,6 +20,14 @@ def parse_args():
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
     )
     parser.add_argument(
+        "--unet",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--clip",
+        action="store_true",
+    )
+    parser.add_argument(
         "--train_data_path",
         type=str,
         default=None,
@@ -135,7 +143,11 @@ def load_models(args):
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
             
-    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"clip_image_encoder":True, "clip_image_encoder_from_pretrained":True, "clip_dtype":torch.float32})
+    models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"unet_dtype":torch.float32 if args.unet == True else None,
+                                                                            "clip_train":True if args.clip == True else None,
+                                                                            "clip_image_encoder":True,
+                                                                            "clip_image_encoder_from_pretrained":True,
+                                                                            "clip_dtype":torch.float32 if args.clip == True else precison,})
 
     return models
 
@@ -240,8 +252,8 @@ def train(accelerator,
             
             latents = sampler.add_noise(latents, timesteps, noise)
 
-            contexts = clip(batch['ref_values']).to(dtype=weight_dtype)
-
+            contexts = clip(batch['ref_values'].to(next(clip.parameters()).dtype)).to(dtype=weight_dtype)
+            
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
 
             model_pred = diffusion(
@@ -269,8 +281,12 @@ def train(accelerator,
                         save_path = os.path.join("./training", f"checkpoint-{global_step}")
                         os.makedirs(save_path,exist_ok=True)
 
-                        clip = accelerator.unwrap_model(clip)
-                        torch.save(clip, os.path.join(save_path, f"clip_image_encoder_{epoch}.pth"))
+                        if args.clip == True:
+                            clip = accelerator.unwrap_model(clip)
+                            torch.save(clip, os.path.join(save_path, f"clip_image_encoder_{epoch}.pth"))
+                        if args.unet == True:
+                            diffusion = accelerator.unwrap_model(diffusion)
+                            torch.save(diffusion, os.path.join(save_path, f"diffusion_{epoch}.pth"))
                     
                     if global_step % args.validation_step == 0:
                         log_validation(encoder,
@@ -286,9 +302,13 @@ def train(accelerator,
         
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
-
-            clip = accelerator.unwrap_model(clip)
-            torch.save(clip, f"./training/clip_image_encoder_{epoch}.pth")
+            
+            if args.clip == True:
+                clip = accelerator.unwrap_model(clip)
+                torch.save(clip, f"./training/clip_image_encoder_{epoch}.pth")
+            if args.unet == True:
+                diffusion = accelerator.unwrap_model(diffusion)
+                torch.save(diffusion, f"./training/diffusion_{epoch}.pth")
 
 
 def main(args):
@@ -326,7 +346,17 @@ def main(args):
 
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
-    diffusion.requires_grad_(False)
+
+    if args.clip == True:
+        clip.requires_grad_(True)
+        clip.clip_image_encoder.vision_model.post_layernorm.requires_grad_(False)
+    else:
+        clip.requires_grad_(False)
+
+    if args.unet == True:
+        diffusion.requires_grad_(True)
+    else:
+        diffusion.requires_grad_(False)
 
     train_dataset = make_train_dataset(args.train_data_path, accelerator)
 
@@ -340,9 +370,12 @@ def main(args):
     )
  
     from torch.optim import AdamW
-
-    params_to_optimize = list(clip.parameters())
-
+    
+    params_to_optimize = []
+    if args.clip == True:
+        params_to_optimize += list(clip.parameters())
+    if args.unet == True:
+        params_to_optimize += list(diffusion.parameters())
     
     if args.use_lr_scheduler:
         optimizer = AdamW(
@@ -368,8 +401,12 @@ def main(args):
     from networks.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
-    
-    to_train_models = [clip]    
+    to_train_models = []
+    if args.clip == True:
+        to_train_models.append(clip)
+    if args.unet == True:
+        to_train_models.append(diffusion)
+
     *to_train_models, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         *to_train_models, optimizer, train_dataloader, lr_scheduler
     )
@@ -388,7 +425,10 @@ def main(args):
     
     encoder.to(accelerator.device, dtype=weight_dtype)
     decoder.to(accelerator.device, dtype=weight_dtype)
-    diffusion.to(accelerator.device, dtype=weight_dtype)
+    if args.clip != True:
+        clip.to(accelerator.device, dtype=weight_dtype)
+    if args.unet != True:
+        diffusion.to(accelerator.device, dtype=weight_dtype)
 
     train(accelerator,
         train_dataloader,

@@ -10,22 +10,27 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     decoder = VAE_Decoder().to(dtype)
 
     if kwargs.get("is_inpaint") == True:
-        diffusion = Diffusion(in_channels=9, **kwargs).to(dtype)
+        diffusion = Diffusion(in_channels=9, **kwargs).to(kwargs.get("unet_dtype", dtype))
     else:
-        diffusion = Diffusion(in_channels=4, **kwargs).to(dtype)
+        diffusion = Diffusion(in_channels=4, **kwargs).to(kwargs.get("unet_dtype", dtype))
 
     if state_dict is not None:
         encoder.load_state_dict(state_dict['encoder'], strict=True)
         decoder.load_state_dict(state_dict['decoder'], strict=True)
 
         if kwargs.get("clip_train") == True:
-            clip = CLIP(n_vocab=49408).to(dtype=kwargs.get("clip_dtype"))
-            clip.load_state_dict(state_dict['clip'], strict=True)
-        elif kwargs.get("clip_image_encoder") == True:
-            clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype=kwargs.get("clip_dtype"))
+            if kwargs.get("clip_image_encoder") == True:
+                clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype=kwargs.get("clip_dtype"))
+            else:
+                clip = CLIP(n_vocab=49408).to(dtype=kwargs.get("clip_dtype"))
+                clip.load_state_dict(state_dict['clip'], strict=True)
         else:
-            clip = CLIP(n_vocab=49408).to(dtype)
-            clip.load_state_dict(state_dict['clip'], strict=True)
+            if kwargs.get("clip_image_encoder") == True:
+                clip = CLIPImageEncoder(from_pretrained=kwargs.get("clip_image_encoder_from_pretrained")).to(dtype)
+                # clip.load_state_dict(state_dict['clip'], strict=True)
+            else:
+                clip = CLIP(n_vocab=49408).to(dtype)
+                clip.load_state_dict(state_dict['clip'], strict=True)
 
         if kwargs.get("is_lora") == True:
             diffusion.load_state_dict(state_dict['diffusion'], strict=False)

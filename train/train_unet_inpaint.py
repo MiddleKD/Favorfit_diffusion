@@ -121,13 +121,21 @@ def make_train_dataset(path, tokenizer, accelerator):
             transforms.ToTensor(),
         ]
     )
+    mask_latents_transforms = transforms.Compose(
+        [
+            transforms.Resize(64, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(64),
+            transforms.ToTensor(),
+        ]
+    )
 
     def preprocess_train(examples):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        masks = [mask.convert("L") for mask in examples[mask_column]]
-        masks = [mask_transforms(mask) for mask in masks]
+        masks_pil_list = [mask.convert("L") for mask in examples[mask_column]]
+        masks = [mask_transforms(mask) for mask in masks_pil_list]
+        masks_latent = [mask_latents_transforms(mask) for mask in masks_pil_list]
 
         black_image = torch.zeros_like(images[0]) -1
         masked_images = [black_image * (mask) + image * (1-mask) for image, mask in zip(images, masks)]
@@ -135,7 +143,7 @@ def make_train_dataset(path, tokenizer, accelerator):
         tokenized_ids = tokenizer.batch_encode_plus([cur for cur in examples[caption_column]], padding="max_length", max_length=77, truncation=True).input_ids
         
         examples["pixel_values"] = images
-        examples["masks"] = masks
+        examples["masks"] = masks_latent
         examples["masked_images"] = masked_images
         examples["input_ids"] = tokenized_ids
 
@@ -226,11 +234,19 @@ def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
+    masks = torch.stack([example["masks"] for example in examples])
+    masks = masks.to(memory_format=torch.contiguous_format).float()
+
+    masked_images = torch.stack([example["masked_images"] for example in examples])
+    masked_images = masked_images.to(memory_format=torch.contiguous_format).float()
+
     input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
 
     return {
         "pixel_values": pixel_values,
-        "input_ids": input_ids,
+        "masks": masks,
+        "masked_images":masked_images,
+        "input_ids": input_ids
     }
 
 

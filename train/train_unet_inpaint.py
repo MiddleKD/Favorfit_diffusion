@@ -23,16 +23,24 @@ def parse_args():
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
     )
     parser.add_argument(
-        "--clip",
-        action="store_true",
-    )
-    parser.add_argument(
         "--train_data_path",
         type=str,
         default=None,
     )
     parser.add_argument(
         "--validation_prompts",
+        type=str,
+        default=None,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--validation_images",
+        type=str,
+        default=None,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--validation_masks",
         type=str,
         default=None,
         nargs="+",
@@ -96,7 +104,7 @@ def parse_args():
 def make_train_dataset(path, tokenizer, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, caption_column = column_names
+    image_column, mask_column, caption_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -106,14 +114,29 @@ def make_train_dataset(path, tokenizer, accelerator):
             transforms.Normalize([0.5], [0.5]),
         ]
     )
+    mask_transforms = transforms.Compose(
+        [
+            transforms.Resize(512, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(512),
+            transforms.ToTensor(),
+        ]
+    )
 
     def preprocess_train(examples):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
+        masks = [mask.convert("L") for mask in examples[mask_column]]
+        masks = [mask_transforms(mask) for mask in masks]
+
+        black_image = torch.zeros_like(images[0]) -1
+        masked_images = [black_image * (mask) + image * (1-mask) for image, mask in zip(images, masks)]
+
         tokenized_ids = tokenizer.batch_encode_plus([cur for cur in examples[caption_column]], padding="max_length", max_length=77, truncation=True).input_ids
         
         examples["pixel_values"] = images
+        examples["masks"] = masks
+        examples["masked_images"] = masked_images
         examples["input_ids"] = tokenized_ids
 
         return examples
@@ -140,16 +163,13 @@ def load_models(args):
             from utils.model_converter import convert_model
             diffusion_state_dict = convert_model(diffusion_state_dict)
     
-    kwargs = {"is_lora":True}
-    if args.clip == True:
-        kwargs["clip_train"] = True
-        kwargs["clip_dtype"] = torch.float32
+    kwargs = {"is_inpaint":True}
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **kwargs)
 
     return models, tokenizer
 
 import wandb
-from pipelines.pipeline_default import generate
+from pipelines.pipeline_inpainting import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, args):
 
@@ -160,11 +180,14 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
     models['diffusion'] = diffusion
 
     image_logs = []
-    for validation_prompt in args.validation_prompts:
+    for validation_prompt, validation_image, validation_mask in zip(args.validation_prompts, args.validation_images, args.validation_masks):
+        validation_image = Image.open(validation_image).convert("RGB")
+        validation_mask = Image.open(validation_mask).convert("L")
         output_images = generate(
             prompt=validation_prompt,
             uncond_prompt="deform, low quality",
-            input_image=None,
+            input_image=validation_image,
+            mask_image=validation_mask,
             num_per_image=3,
             do_cfg=True,
             cfg_scale=7.5,
@@ -182,7 +205,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
 
         for image in images:
             image_logs.append(
-                {"images": image, "validation_prompts": validation_prompt}
+                {"images": image, "validation_prompts": validation_prompt, "validation_images": validation_image, "validation_masks": validation_mask}
             )
 
     for tracker in accelerator.trackers:
@@ -192,7 +215,8 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
             for log in image_logs:
                 image = log["images"]
                 validation_prompt = log["validation_prompts"]
-                formatted_images.append(wandb.Image(image, caption=validation_prompt))
+                formatted_images.append(wandb.Image(validation_image, caption=validation_prompt))
+                formatted_images.append(wandb.Image(validation_mask, caption="mask"))
 
             tracker.log({"validation": formatted_images})
 
@@ -219,7 +243,6 @@ def train(accelerator,
         encoder,
         decoder,
         diffusion,
-        lora_wrapper_model,
         sampler,
         optimizer,
         lr_scheduler,
@@ -236,15 +259,23 @@ def train(accelerator,
 
     for epoch in range(args.epochs):
         for step, batch in enumerate(train_dataloader):
-            latents = encoder(batch["pixel_values"].to(dtype=weight_dtype))
-
-            noise = torch.randn_like(latents)
+            image_latents = encoder(batch["pixel_values"].to(dtype=weight_dtype))
+            mask_latents = batch["masks"].to(dtype=weight_dtype)
+            masked_image_latents = encoder(batch["masked_images"].to(dtype=weight_dtype))
+        
+            noise = torch.randn_like(image_latents)
             batch_size = batch['pixel_values'].shape[0]
             
             timesteps = torch.randint(0, sampler.num_train_timesteps, (batch_size,), device="cpu").long()
             
-            latents = sampler.add_noise(latents, timesteps, noise)
+            image_latents = sampler.add_noise(image_latents, timesteps, noise)
+            masked_image_latents = sampler.add_noise(masked_image_latents, timesteps, noise)
 
+            latents = torch.cat([image_latents,
+                                 mask_latents,
+                                 masked_image_latents],
+                                 dim=1)
+            
             contexts = clip(batch['input_ids']).to(dtype=weight_dtype)
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
@@ -274,12 +305,8 @@ def train(accelerator,
                         save_path = os.path.join("./training", f"checkpoint-{global_step}")
                         os.makedirs(save_path,exist_ok=True)
 
-                        lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
-                        torch.save(lora_wrapper_model, os.path.join(save_path, f"lora_{epoch}.pth"))
-                        
-                        if args.clip == True:
-                            clip = accelerator.unwrap_model(clip)
-                            torch.save(clip, os.path.join(save_path, f"clip_{epoch}.pth"))
+                        diffusion = accelerator.unwrap_model(diffusion)
+                        torch.save(diffusion, os.path.join(save_path, f"diffusion_{epoch}.pth"))
                     
                     if global_step % args.validation_step == 0:
                         log_validation(encoder,
@@ -297,12 +324,9 @@ def train(accelerator,
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
 
-            lora_wrapper_model = accelerator.unwrap_model(lora_wrapper_model)
-            torch.save(lora_wrapper_model, f"./training/lora_{epoch}.pth")
+            diffusion = accelerator.unwrap_model(diffusion)
+            torch.save(diffusion, f"./training/diffusion_{epoch}.pth")
 
-            if args.clip == True:
-                clip = accelerator.unwrap_model(clip)
-                torch.save(clip, f"./training/clip_{epoch}.pth")
 
 def main(args):
     cur_dir = os.path.dirname(os.path.abspath(__name__))
@@ -339,16 +363,8 @@ def main(args):
 
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
-    diffusion.requires_grad_(False)
     clip.requires_grad_(False)
-    
-    if args.clip == True:
-        clip.embedding.token_embedding.requires_grad_(True)
-
-    from networks.lora.lora import extract_lora_from_unet
-    lora_wrapper_model = extract_lora_from_unet(diffusion)
-    lora_wrapper_model.requires_grad_(True)
-    lora_wrapper_model.train()
+    diffusion.requires_grad_(True)
 
     train_dataset = make_train_dataset(args.train_data_path, tokenizer, accelerator)
 
@@ -360,11 +376,10 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=0
     )
- 
+
+
     from torch.optim import AdamW
-    params_to_optimize = list(lora_wrapper_model.parameters())
-    if args.clip == True:
-        params_to_optimize += list(clip.parameters())
+    params_to_optimize = list(diffusion.parameters())
 
 
     if args.use_lr_scheduler:
@@ -392,10 +407,7 @@ def main(args):
     from networks.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
-    if args.clip == True:
-        to_train_models = [lora_wrapper_model, clip]
-    else:
-        to_train_models = [lora_wrapper_model]
+    to_train_models = [diffusion]
 
     *to_train_models, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         *to_train_models, optimizer, train_dataloader, lr_scheduler
@@ -410,18 +422,16 @@ def main(args):
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
         tracker_config.pop("validation_prompts")
+        tracker_config.pop("validation_images")
+        tracker_config.pop("validation_masks")
 
-        accelerator.init_trackers("train_lora", config=tracker_config)
+        accelerator.init_trackers("train_unet_inpaint", config=tracker_config)
     
+    clip.to(accelerator.device, dtype=weight_dtype)
     encoder.to(accelerator.device, dtype=weight_dtype)
     decoder.to(accelerator.device, dtype=weight_dtype)
-    diffusion.to(accelerator.device, dtype=weight_dtype)
-    lora_wrapper_model.to(accelerator.device, dtype=torch.float32)
-    if args.clip == True:
-        clip.to(accelerator.device, dtype=torch.float32)
-    else:
-        clip.to(accelerator.device, dtype=weight_dtype)
-    
+    diffusion.to(accelerator.device, dtype=torch.float32)
+
     train(accelerator,
         train_dataloader,
         tokenizer,
@@ -429,7 +439,6 @@ def main(args):
         encoder,
         decoder,
         diffusion,
-        lora_wrapper_model,
         sampler,
         optimizer,
         lr_scheduler,

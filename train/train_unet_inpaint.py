@@ -406,7 +406,7 @@ def main(args):
             weight_decay=1e-2,
             eps=1e-08,
         )
-        from networks.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
+        from models.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
         lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)
     else:
         optimizer = AdamW(
@@ -420,7 +420,7 @@ def main(args):
         lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
 
     
-    from networks.scheduler.ddpm import DDPMSampler
+    from models.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
     to_train_models = [diffusion]

@@ -2,8 +2,8 @@ import torch
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
-from networks.scheduler.ddpm import DDPMSampler
-from networks.clip.clip_image_encoder import CLIPImagePreprocessor
+from models.scheduler.ddpm import DDPMSampler
+from models.clip.clip_image_encoder import CLIPImagePreprocessor
 from pipelines.utils import rescale, get_time_embedding, get_model_weights_dtypes, prepare_latent_width_height
 
 

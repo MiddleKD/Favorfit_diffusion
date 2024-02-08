@@ -345,7 +345,7 @@ def main(args):
     if args.clip == True:
         clip.embedding.token_embedding.requires_grad_(True)
 
-    from networks.lora.lora import extract_lora_from_unet
+    from models.lora.lora import extract_lora_from_unet
     lora_wrapper_model = extract_lora_from_unet(diffusion)
     lora_wrapper_model.requires_grad_(True)
     lora_wrapper_model.train()
@@ -376,7 +376,7 @@ def main(args):
     from torch.optim.lr_scheduler import LambdaLR
     lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
     
-    from networks.scheduler.ddpm import DDPMSampler
+    from models.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
     if args.clip == True:

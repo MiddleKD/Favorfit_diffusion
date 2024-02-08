@@ -288,7 +288,7 @@ def train(accelerator,
                         os.makedirs(save_path,exist_ok=True)
 
                         if args.clip == True:
-                            clip = accelerator.unwrap_model(clip)
+                            clip = accelerator.unwrap_model(clip.state_dict())
                             torch.save(clip, os.path.join(save_path, f"clip_image_encoder_{epoch}.pth"))
                         if args.unet == True:
                             diffusion = accelerator.unwrap_model(diffusion)
@@ -310,7 +310,7 @@ def train(accelerator,
         if accelerator.is_main_process:
             
             if args.clip == True:
-                clip = accelerator.unwrap_model(clip)
+                clip = accelerator.unwrap_model(clip.state_dict())
                 torch.save(clip, f"./training/clip_image_encoder_{epoch}.pth")
             if args.unet == True:
                 diffusion = accelerator.unwrap_model(diffusion)

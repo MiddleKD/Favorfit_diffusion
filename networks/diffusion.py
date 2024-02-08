@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from models.attention import SelfAttention, CrossAttention
+from networks.attention import SelfAttention, CrossAttention
 
 class TimeEmbedding(nn.Module):
     def __init__(self, n_embd):

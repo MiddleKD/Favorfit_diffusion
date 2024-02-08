@@ -1,9 +1,9 @@
 import torch
-from models.clip.clip import CLIP
-from models.clip.clip_image_encoder import CLIPImageEncoder
-from models.vae.encoder import VAE_Encoder
-from models.vae.decoder import VAE_Decoder
-from models.diffusion import Diffusion
+from networks.clip.clip import CLIP
+from networks.clip.clip_image_encoder import CLIPImageEncoder
+from networks.vae.encoder import VAE_Encoder
+from networks.vae.decoder import VAE_Decoder
+from networks.diffusion import Diffusion
 
 def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     encoder = VAE_Encoder().to(dtype)
@@ -51,7 +51,7 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
     }
 
 
-from models.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
+from networks.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
 
 def load_controlnet_model(state_dict=None, dtype=torch.float16, **kwargs):
     if not isinstance(state_dict, list):

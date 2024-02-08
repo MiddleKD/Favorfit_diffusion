@@ -5,8 +5,8 @@ if __name__ == "__main__":
 import torch
 from torch import nn
 from torch.nn import functional as F
-from models.attention import SelfAttention
-from models.model_utils import zero_module
+from networks.attention import SelfAttention
+from networks.model_utils import zero_module
 
 
 class ResBlock(nn.Module):

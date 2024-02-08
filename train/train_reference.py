@@ -99,7 +99,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-from models.clip.clip_image_encoder import CLIPImagePreprocessor
+from networks.clip.clip_image_encoder import CLIPImagePreprocessor
 def make_train_dataset(path, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
@@ -391,7 +391,7 @@ def main(args):
             weight_decay=1e-2,
             eps=1e-08,
         )
-        from models.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
+        from networks.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
         lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)
     else:
         optimizer = AdamW(
@@ -404,7 +404,7 @@ def main(args):
         from torch.optim.lr_scheduler import LambdaLR
         lr_scheduler = LambdaLR(optimizer, lambda _: 1, last_epoch=-1)
     
-    from models.scheduler.ddpm import DDPMSampler
+    from networks.scheduler.ddpm import DDPMSampler
     sampler = DDPMSampler(generator)
     
     to_train_models = []

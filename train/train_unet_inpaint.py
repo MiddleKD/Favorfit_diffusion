@@ -9,6 +9,7 @@ from accelerate import Accelerator
 from datasets import load_dataset
 import torch
 from torchvision import transforms
+from train_utils import update_ckpt_weights
 
 import argparse
 import json
@@ -16,11 +17,16 @@ def parse_palette_argument(palette_string):
     return json.loads(palette_string)
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
+    parser = argparse.ArgumentParser(description="Favorfit diffusion inpaint train argements")
     parser.add_argument(
         "--diffusion_model_path",
         type=str,
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
+    )
+    parser.add_argument(
+        "--resume_ckpt_path",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--train_data_path",
@@ -174,6 +180,9 @@ def load_models(args):
     kwargs = {"is_inpaint":True}
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **kwargs)
 
+    if args.resume_ckpt_path is not None:
+        models = update_ckpt_weights(models, root_ckpt_path=args.resume_ckpt_path)
+
     return models, tokenizer
 
 import wandb
@@ -198,6 +207,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
             mask_image=validation_mask,
             num_per_image=3,
             do_cfg=True,
+            strength=0.6,
             cfg_scale=7.5,
             sampler_name="ddpm",
             n_inference_steps=20,
@@ -223,8 +233,11 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
             for log in image_logs:
                 image = log["images"]
                 validation_prompt = log["validation_prompts"]
+                validation_image = log["validation_images"]
+                validation_mask = log["validation_masks"]
                 formatted_images.append(wandb.Image(validation_image, caption=validation_prompt))
                 formatted_images.append(wandb.Image(validation_mask, caption="mask"))
+                formatted_images.append(wandb.Image(image, caption="result"))
 
             tracker.log({"validation": formatted_images})
 
@@ -285,7 +298,6 @@ def train(accelerator,
             timesteps = torch.randint(0, sampler.num_train_timesteps, (batch_size,), device="cpu").long()
             
             image_latents = sampler.add_noise(image_latents, timesteps, noise)
-            masked_image_latents = sampler.add_noise(masked_image_latents, timesteps, noise)
 
             latents = torch.cat([image_latents,
                                  mask_latents,
@@ -303,9 +315,13 @@ def train(accelerator,
             )
 
             target = noise
-            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+            loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
 
             accelerator.backward(loss)
+            if accelerator.sync_gradients:
+                params_to_clip = list(diffusion.parameters())
+                accelerator.clip_grad_norm_(params_to_clip, 1.0)
             optimizer.step()
             lr_scheduler.step()
             optimizer.zero_grad(set_to_none=False)
@@ -322,7 +338,7 @@ def train(accelerator,
                         os.makedirs(save_path,exist_ok=True)
 
                         diffusion = accelerator.unwrap_model(diffusion)
-                        torch.save(diffusion, os.path.join(save_path, f"diffusion_{epoch}.pth"))
+                        torch.save(diffusion.state_dict(), os.path.join(save_path, f"diffusion_{epoch}.pth"))
                     
                     if global_step % args.validation_step == 0:
                         log_validation(encoder,
@@ -341,7 +357,7 @@ def train(accelerator,
         if accelerator.is_main_process:
 
             diffusion = accelerator.unwrap_model(diffusion)
-            torch.save(diffusion, f"./training/diffusion_{epoch}.pth")
+            torch.save(diffusion.state_dict(), f"./training/diffusion_{epoch}.pth")
 
 
 def main(args):

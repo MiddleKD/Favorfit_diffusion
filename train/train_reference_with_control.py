@@ -18,7 +18,13 @@ def parse_args():
     parser.add_argument(
         "--diffusion_model_path",
         type=str,
+        
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
+    )
+    parser.add_argument(
+        "--controlnet_model_path",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--resume_ckpt_path",
@@ -40,6 +46,12 @@ def parse_args():
     )
     parser.add_argument(
         "--validation_image_paths",
+        type=str,
+        default=None,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--control_image_paths",
         type=str,
         default=None,
         nargs="+",
@@ -104,7 +116,7 @@ from networks.clip.clip_image_encoder import CLIPImagePreprocessor
 def make_train_dataset(path, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, reference_column = column_names
+    image_column, reference_column, conditioning_image_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -117,6 +129,14 @@ def make_train_dataset(path, accelerator):
         ]
     )
     reference_transforms = CLIPImagePreprocessor()
+    conditioning_image_transforms = transforms.Compose(
+        [
+            transforms.Resize(512, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(512),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5]),
+        ]
+    )
 
     def preprocess_train(examples):
         images = [image.convert("RGB") for image in examples[image_column]]
@@ -125,8 +145,12 @@ def make_train_dataset(path, accelerator):
         ref_images = [image.convert("RGB") for image in examples[reference_column]]
         ref_images = [reference_transforms(image)[0] for image in ref_images]
 
+        conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
+        conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
+
         examples["pixel_values"] = images
         examples["ref_values"] = ref_images
+        examples["conditioning_pixel_values"] = conditioning_images
 
         return examples
     
@@ -155,6 +179,11 @@ def load_models(args):
                                                                             "clip_image_encoder_from_pretrained":True,
                                                                             "clip_dtype":torch.float32 if args.clip == True else precison,})
 
+    from utils.model_loader import load_controlnet_model
+    control_state_dict = torch.load(args.controlnet_model_path)
+    controlnet = load_controlnet_model(control_state_dict, dtype=precison)
+    models.update(controlnet)
+
     if args.resume_ckpt_path is not None:
         models = update_ckpt_weights(models, root_ckpt_path=args.resume_ckpt_path)
 
@@ -163,23 +192,26 @@ def load_models(args):
 import wandb
 from pipelines.pipeline_reference import generate
 from PIL import Image
-def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
+def log_validation(encoder, decoder, clip, diffusion, controlnet, embedding, accelerator, args):
 
     models = {}
     models['clip'] = clip
     models['encoder'] = encoder
     models['decoder'] = decoder
     models['diffusion'] = diffusion
+    models['controlnet'] = [controlnet]
+    models['controlnet_embedding'] = [embedding]
 
     image_logs = []
-    for validation_image_path in args.validation_image_paths:
+    for validation_image_path, control_image_path in zip(args.validation_image_paths, args.control_image_paths):
         val_image = Image.open(validation_image_path).convert("RGB")
+        control_image = Image.open(control_image_path).convert("RGB")
 
         output_images = generate(
                 ref_image=val_image,
                 unref_image=None,
                 input_image=None,
-                control_image=None,
+                control_image=control_image,
                 num_per_image=3,
                 strength=0.8,
                 do_cfg=False,
@@ -197,7 +229,7 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
 
         for image in images:
             image_logs.append(
-                {"images": image, "validation_image": val_image}
+                {"images": image, "validation_image": val_image, "control_image": control_image}
             )
 
 
@@ -208,7 +240,9 @@ def log_validation(encoder, decoder, clip, diffusion, accelerator, args):
             for log in image_logs:
                 image = log["images"]
                 validation_image = log["validation_image"]
+                control_image = log["control_image"]
                 formatted_images.append(wandb.Image(validation_image, caption="reference"))
+                formatted_images.append(wandb.Image(control_image, caption="control"))
                 formatted_images.append(wandb.Image(image, caption="generated_image"))                
 
             tracker.log({"validation": formatted_images})
@@ -222,9 +256,13 @@ def collate_fn(examples):
     ref_values = torch.stack([example["ref_values"] for example in examples])
     ref_values = ref_values.to(memory_format=torch.contiguous_format).float()
 
+    conditioning_pixel_values = torch.stack([example["conditioning_pixel_values"] for example in examples])
+    conditioning_pixel_values = conditioning_pixel_values.to(memory_format=torch.contiguous_format).float()
+
     return {
         "pixel_values": pixel_values,
         "ref_values": ref_values,
+        "conditioning_pixel_values": conditioning_pixel_values,
     }
 
 
@@ -236,6 +274,8 @@ def train(accelerator,
         encoder,
         decoder,
         diffusion,
+        controlnet,
+        embedding,
         sampler,
         optimizer,
         lr_scheduler,
@@ -250,6 +290,9 @@ def train(accelerator,
         disable=not accelerator.is_local_main_process,
     )
 
+    clip_dtype = next(clip.parameters()).dtype
+    embedding_dtype = next(embedding.parameters()).dtype
+    controlnet_dtype = next(embedding.parameters()).dtype
     for epoch in range(args.epochs):
         for step, batch in enumerate(train_dataloader):
             latents = encoder(batch["pixel_values"].to(dtype=weight_dtype))
@@ -261,14 +304,28 @@ def train(accelerator,
             
             latents = sampler.add_noise(latents, timesteps, noise)
 
-            contexts = clip(batch['ref_values'].to(next(clip.parameters()).dtype)).to(dtype=weight_dtype)
+            contexts = clip(batch['ref_values'].to(clip_dtype)).to(dtype=weight_dtype)
             
+            control_image = batch["conditioning_pixel_values"].to(latents.device)
+            control_latents = embedding(control_image.to(embedding_dtype)).to(dtype=weight_dtype)
+
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
 
+            controlnet_downs, controlnet_mids = controlnet(
+                original_sample=latents.to(controlnet_dtype),
+                latent=control_latents.to(controlnet_dtype), 
+                context=contexts.to(controlnet_dtype),
+                time=time_embeddings.to(controlnet_dtype)
+            )
+
             model_pred = diffusion(
-                latents,
-                contexts,
-                time_embeddings
+                latents.to(dtype=weight_dtype),
+                contexts.to(dtype=weight_dtype),
+                time_embeddings.to(dtype=weight_dtype),
+                additional_res_condition=[
+                    [cur.to(dtype=weight_dtype) for cur in controlnet_downs], 
+                    [cur.to(dtype=weight_dtype) for cur in controlnet_mids]
+                ]
             )
 
             target = noise
@@ -309,6 +366,8 @@ def train(accelerator,
                                     decoder,
                                     clip,
                                     diffusion,
+                                    controlnet,
+                                    embedding,
                                     accelerator,
                                     args)
 
@@ -359,9 +418,13 @@ def main(args):
     encoder = models['encoder']
     decoder = models['decoder'] 
     diffusion = models['diffusion']
+    controlnet = models['controlnet'][0]
+    embedding = models['controlnet_embedding'][0]
 
     encoder.requires_grad_(False)
     decoder.requires_grad_(False)
+    controlnet.requires_grad_(False)
+    embedding.requires_grad_(False)
 
     if args.clip == True:
         clip.requires_grad_(True)
@@ -436,11 +499,14 @@ def main(args):
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
         tracker_config.pop("validation_image_paths")
+        tracker_config.pop("control_image_paths")
 
         accelerator.init_trackers("train_reference", config=tracker_config)
     
     encoder.to(accelerator.device, dtype=weight_dtype)
     decoder.to(accelerator.device, dtype=weight_dtype)
+    controlnet.to(accelerator.device, dtype=weight_dtype)
+    embedding.to(accelerator.device, dtype=weight_dtype)
     if args.clip != True:
         clip.to(accelerator.device, dtype=weight_dtype)
     if args.unet != True:
@@ -452,6 +518,8 @@ def main(args):
         encoder,
         decoder,
         diffusion,
+        controlnet,
+        embedding,
         sampler,
         optimizer,
         lr_scheduler,

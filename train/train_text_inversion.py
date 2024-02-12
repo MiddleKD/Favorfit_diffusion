@@ -9,15 +9,21 @@ from accelerate import Accelerator
 from datasets import load_dataset
 import torch
 from torchvision import transforms
+from train_utils import update_ckpt_weights
 
 import argparse
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
+    parser = argparse.ArgumentParser(description="Favorfit diffusion text inversion train argements")
     parser.add_argument(
         "--diffusion_model_path",
         type=str,
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
+    )
+    parser.add_argument(
+        "--resume_ckpt_path",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--lora",
@@ -139,6 +145,9 @@ def load_models(args):
             diffusion_state_dict = convert_model(diffusion_state_dict)
             
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **{"is_lora":args.lora, "clip_train":True, "clip_dtype":torch.float32})
+    
+    if args.resume_ckpt_path is not None:
+        models = update_ckpt_weights(models, root_ckpt_path=args.resume_ckpt_path)
 
     return models, tokenizer
 

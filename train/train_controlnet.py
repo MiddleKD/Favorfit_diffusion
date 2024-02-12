@@ -9,6 +9,7 @@ from accelerate import Accelerator
 from datasets import load_dataset
 import torch
 from torchvision import transforms
+from train_utils import update_ckpt_weights
 
 import argparse
 
@@ -21,6 +22,11 @@ def parse_args():
     )
     parser.add_argument(
         "--controlnet_model_path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--resume_ckpt_path",
         type=str,
         default=None,
     )
@@ -172,6 +178,9 @@ def load_models(args):
             control_state_dict = convert_controlnet_model(control_state_dict)
     controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32, **{"global_mean_pooling":args.global_mean_pooling})
     models.update(controlnet)
+
+    if args.resume_ckpt_path is not None:
+        models = update_ckpt_weights(models, root_ckpt_path=args.resume_ckpt_path)
 
     return models, tokenizer
 
@@ -336,8 +345,8 @@ def train_controlnet(accelerator,
 
                         controlnet = accelerator.unwrap_model(controlnet)
                         embedding = accelerator.unwrap_model(embedding)
-                        torch.save(controlnet, os.path.join(save_path, f"controlnet_{epoch}.pth"))
-                        torch.save(embedding, os.path.join(save_path, f"embedding_{epoch}.pth"))
+                        torch.save(controlnet.state_dict(), os.path.join(save_path, f"controlnet_{epoch}.pth"))
+                        torch.save(embedding.state_dict(), os.path.join(save_path, f"embedding_{epoch}.pth"))
 
                         # accelerator.save_state(save_path)
 
@@ -360,8 +369,8 @@ def train_controlnet(accelerator,
         if accelerator.is_main_process:
             controlnet = accelerator.unwrap_model(controlnet)
             embedding = accelerator.unwrap_model(embedding)
-            torch.save(controlnet, f"./training/controlnet_{epoch}.pth")
-            torch.save(embedding, f"./training/embedding_{epoch}.pth")
+            torch.save(controlnet.state_dict(), f"./training/controlnet_{epoch}.pth")
+            torch.save(embedding.state_dict(), f"./training/embedding_{epoch}.pth")
 
 def main(args):
     cur_dir = os.path.dirname(os.path.abspath(__name__))
@@ -395,8 +404,8 @@ def main(args):
     encoder = models['encoder']
     decoder = models['decoder'] 
     diffusion = models['diffusion']
-    controlnet = models['controlnet']
-    embedding = models['controlnet_embedding']
+    controlnet = models['controlnet'][0]
+    embedding = models['controlnet_embedding'][0]
 
     clip.requires_grad_(False)
     encoder.requires_grad_(False)

@@ -9,6 +9,7 @@ from accelerate import Accelerator
 from datasets import load_dataset
 import torch
 from torchvision import transforms
+from train_utils import update_ckpt_weights
 
 import argparse
 import json
@@ -16,11 +17,16 @@ def parse_palette_argument(palette_string):
     return json.loads(palette_string)
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Favorfit diffusion controlnet train argements")
+    parser = argparse.ArgumentParser(description="Favorfit diffusion lora train argements")
     parser.add_argument(
         "--diffusion_model_path",
         type=str,
         default="/home/mlfavorfit/lib/favorfit/kjg/0_model_weights/diffusion/v1-5-pruned-emaonly.ckpt",
+    )
+    parser.add_argument(
+        "--resume_ckpt_path",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--clip",
@@ -145,6 +151,9 @@ def load_models(args):
         kwargs["clip_train"] = True
         kwargs["clip_dtype"] = torch.float32
     models = load_diffusion_model(diffusion_state_dict, dtype=precison, **kwargs)
+
+    if args.resume_ckpt_path is not None:
+        models = update_ckpt_weights(models, root_ckpt_path=args.resume_ckpt_path)
 
     return models, tokenizer
 

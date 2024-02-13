@@ -27,7 +27,10 @@ def update_ckpt_weights(models: Dict, root_ckpt_path: str, dtype=torch.float32) 
                     print(f"{model_name} is updated from ckpt pickled nn.modules {fn}")
                 else:
                     raise ValueError(f"{fn} is unknown ckpt type")
-                models[model_name].to(dtype=dtype)
+                if isinstance(models[model_name], list):
+                    models[model_name][0].to(dtype=dtype)
+                else:
+                    models[model_name].to(dtype=dtype)
             else:
                 non_match_count += 1
                 

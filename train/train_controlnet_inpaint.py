@@ -343,7 +343,7 @@ def train_controlnet(accelerator,
 
             target = noise
 
-            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
             mask_latents = batch["masks"].to(dtype=weight_dtype)
             loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
             

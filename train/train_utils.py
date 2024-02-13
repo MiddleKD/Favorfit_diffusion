@@ -14,10 +14,16 @@ def update_ckpt_weights(models: Dict, root_ckpt_path: str, dtype=torch.float32) 
             if model_name in os.path.basename(fn):
                 weights = torch.load(fn)
                 if isinstance(weights, dict):
-                    models[model_name].load_state_dict(weights, strict=False)
+                    if isinstance(models[model_name], list):
+                        models[model_name][0].load_state_dict(weights, strict=False)
+                    else:
+                        models[model_name].load_state_dict(weights, strict=False)
                     print(f"{model_name} is updated from ckpt state_dict {fn}")
                 elif isinstance(weights, torch.nn.Module):
-                    models[model_name] = weights
+                    if isinstance(models[model_name], list):
+                        models[model_name][0] = weights
+                    else:
+                        models[model_name] = weights
                     print(f"{model_name} is updated from ckpt pickled nn.modules {fn}")
                 else:
                     raise ValueError(f"{fn} is unknown ckpt type")

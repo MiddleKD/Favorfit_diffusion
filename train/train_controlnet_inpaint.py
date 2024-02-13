@@ -8,6 +8,8 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from accelerate import Accelerator
 from datasets import load_dataset
 import torch
+import numpy as np
+from PIL import Image
 from torchvision import transforms
 from train_utils import update_ckpt_weights
 
@@ -110,7 +112,7 @@ def parse_args():
 def make_train_dataset(path, tokenizer, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
-    image_column, conditioning_image_column, caption_column = column_names
+    image_column, conditioning_image_column, mask_column, caption_column = column_names
 
     image_transforms = transforms.Compose(
         [
@@ -130,16 +132,29 @@ def make_train_dataset(path, tokenizer, accelerator):
         ]
     )
 
+    mask_transforms = transforms.Compose(
+        [
+            transforms.Resize(64, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(64),
+            transforms.ToTensor(),
+        ]
+    )
+
     def preprocess_train(examples):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
         conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
         conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
+
+        masks = [Image.fromarray(255 - np.array(mask.convert("L"))) for mask in examples[mask_column]]
+        masks = [mask_transforms(mask) for mask in masks]
+
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77, truncation=True).input_ids
        
         examples["pixel_values"] = images
         examples["conditioning_pixel_values"] = conditioning_images
+        examples["masks"] = masks
         examples["input_ids"] = tokenized_ids
 
         return examples
@@ -252,12 +267,16 @@ def collate_fn(examples):
 
     conditioning_pixel_values = torch.stack([example["conditioning_pixel_values"] for example in examples])
     conditioning_pixel_values = conditioning_pixel_values.to(memory_format=torch.contiguous_format).float()
+    
+    masks = torch.stack([example["masks"] for example in examples])
+    masks = masks.to(memory_format=torch.contiguous_format).float()
 
     input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
 
     return {
         "pixel_values": pixel_values,
         "conditioning_pixel_values": conditioning_pixel_values,
+        "masks": masks,
         "input_ids": input_ids,
     }
 
@@ -323,7 +342,9 @@ def train_controlnet(accelerator,
             )
 
             target = noise
+
             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+            mask_latents = batch["masks"].to(dtype=weight_dtype)
             loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
             
             accelerator.backward(loss)

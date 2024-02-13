@@ -145,10 +145,10 @@ def generate(
         controlnet_embedding_models = models["controlnet_embedding"]
         control_embedding_latent_list = []
 
-        if not isinstance(control_image, list): 
-            control_image = [control_image] * len(controlnet_embedding_models)
         if not isinstance(controlnet_embedding_models, list):
             controlnet_embedding_models = [controlnet_embedding_models]
+        if not isinstance(control_image, list): 
+            control_image = [control_image] * len(controlnet_embedding_models)
         
         # forward
         for idx, controlnet_embedding_model in enumerate(controlnet_embedding_models):

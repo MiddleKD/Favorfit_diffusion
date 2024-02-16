@@ -106,7 +106,7 @@ def parse_args():
 
     args = parser.parse_args()
     return args
-
+import numpy as np
 def make_train_dataset(path, tokenizer, accelerator):
     dataset = load_dataset(path)
     column_names = dataset['train'].column_names
@@ -140,10 +140,11 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image_transforms(image) for image in images]
 
         masks_pil_list = [mask.convert("L") for mask in examples[mask_column]]
+        # masks_pil_list = [Image.fromarray(255 - np.array(mask.convert("L"))) for mask in examples[mask_column]]
         masks = [mask_transforms(mask) for mask in masks_pil_list]
         masks_latent = [mask_latents_transforms(mask) for mask in masks_pil_list]
 
-        black_image = torch.zeros_like(images[0]) -1
+        black_image = torch.zeros_like(images[0])
         masked_images = [black_image * (mask) + image * (1-mask) for image, mask in zip(images, masks)]
 
         tokenized_ids = tokenizer.batch_encode_plus([cur for cur in examples[caption_column]], padding="max_length", max_length=77, truncation=True).input_ids
@@ -200,6 +201,8 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, accelerator, ar
     for validation_prompt, validation_image, validation_mask in zip(args.validation_prompts, args.validation_images, args.validation_masks):
         validation_image = Image.open(validation_image).convert("RGB")
         validation_mask = Image.open(validation_mask).convert("L")
+        # validation_mask = Image.fromarray(255 - np.array(Image.open(validation_mask).convert("L")))
+
         output_images = generate(
             prompt=validation_prompt,
             uncond_prompt="deform, low quality",

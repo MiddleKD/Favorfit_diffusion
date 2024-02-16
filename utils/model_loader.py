@@ -53,14 +53,16 @@ def load_diffusion_model(state_dict=None, dtype=torch.float16, **kwargs):
 
 from networks.controlnet.controlnet import Controlnet, ControlNetConditioningEmbedding
 
-def load_controlnet_model(state_dict=None, dtype=torch.float16, **kwargs):
+def load_controlnet_model(state_dict=None, dtype=torch.float16, apply_global_mean_pooling_per_models=None, **kwargs):
     if not isinstance(state_dict, list):
         state_dict = [state_dict]
     state_dict_list = state_dict
 
     controlnet_list, controlnet_embedding_list = [], [] 
-    for state_dict in state_dict_list:
+    for idx, state_dict in enumerate(state_dict_list):
         
+        if apply_global_mean_pooling_per_models is not None:
+            kwargs["global_mean_pooling"] = apply_global_mean_pooling_per_models[idx]
         controlnet = Controlnet(4, **kwargs).to(dtype)
         controlnet_embedding = ControlNetConditioningEmbedding(320, 3).to(dtype)
     

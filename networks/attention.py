@@ -51,7 +51,7 @@ class SelfAttention(nn.Module):
             # Mask where the upper triangle (above the principal diagonal) is 1
             mask = torch.ones_like(weight, dtype=torch.bool).triu(1) 
             # Fill the upper triangle with -inf
-            weight.masked_fill_(mask, -torch.inf) 
+            weight.masked_fill_(mask, -float("inf")) 
         
         # Divide by d_k (Dim / H). 
         # (Batch_Size, H, Seq_Len, Seq_Len) -> (Batch_Size, H, Seq_Len, Seq_Len)

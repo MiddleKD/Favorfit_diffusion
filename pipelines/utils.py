@@ -60,13 +60,13 @@ def rescale(x, old_range, new_range, clamp=False):
 
 def get_time_embedding(timestep, dtype=torch.float16):
     # Shape: (160,)
-    freqs = torch.pow(10000, -torch.arange(start=0, end=160, dtype=dtype) / 160) 
+    freqs = torch.pow(10000, -torch.arange(start=0, end=160) / 160)
     # Shape: (1, 160)
     if len(timestep.shape) == 0:
         timestep = torch.tensor([timestep])
-    x = timestep.clone().detach().to(dtype=dtype)[:, None] * freqs[None]
+    x = timestep.clone().detach()[:, None] * freqs[None]
     # Shape: (1, 160 * 2)
-    return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
+    return torch.cat([torch.cos(x), torch.sin(x)], dim=-1).to(dtype) 
 
 def get_model_weights_dtypes(models_wrapped_dict, verbose=False):
     

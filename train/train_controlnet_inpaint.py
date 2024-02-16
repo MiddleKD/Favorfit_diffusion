@@ -200,8 +200,8 @@ def load_models(args):
     return models, tokenizer
 
 import wandb
-# from pipelines.pipline_default_controlnet import generate
-from pipelines.pipline_controlnet_uncond import generate
+from pipelines.pipline_default_controlnet import generate
+# from pipelines.pipline_controlnet_uncond import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, embedding, accelerator, args):
 
@@ -220,45 +220,45 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
     for validation_prompt, validation_image in zip(args.validation_prompts, args.validation_images):
         validation_image = Image.open(validation_image).convert("RGB")
         
-        output_images = generate(
-            prompt=validation_prompt,
-            uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
-            input_image=None,
-            control_image=None,
-            positive_control_image=[validation_image],
-            num_per_image=3,
-            do_cfg=True,
-            cfg_scale=7.5,
-            sampler_name="ddpm",
-            n_inference_steps=20,
-            strength=0.99,
-            models=models,
-            seeds=[12345, 42, 110],
-            device=accelerator.device,
-            idle_device="cuda",
-            tokenizer=tokenizer,
-            lora_scale=0.7,
-            controlnet_scale=1.0
-        )
-        
         # output_images = generate(
         #     prompt=validation_prompt,
         #     uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
         #     input_image=None,
-        #     control_image=validation_image,
+        #     control_image=None,
+        #     positive_control_image=[validation_image],
         #     num_per_image=3,
         #     do_cfg=True,
         #     cfg_scale=7.5,
         #     sampler_name="ddpm",
         #     n_inference_steps=20,
-        #     strength=0.9,
+        #     strength=0.99,
         #     models=models,
         #     seeds=[12345, 42, 110],
         #     device=accelerator.device,
         #     idle_device="cuda",
         #     tokenizer=tokenizer,
-        #     leave_tqdm=False
+        #     lora_scale=0.7,
+        #     controlnet_scale=1.0
         # )
+        
+        output_images = generate(
+            prompt=validation_prompt,
+            uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
+            input_image=None,
+            control_image=validation_image,
+            num_per_image=3,
+            do_cfg=True,
+            cfg_scale=7.5,
+            sampler_name="ddpm",
+            n_inference_steps=20,
+            strength=0.9,
+            models=models,
+            seeds=[12345, 42, 110],
+            device=accelerator.device,
+            idle_device="cuda",
+            tokenizer=tokenizer,
+            leave_tqdm=False
+        )
 
         images = output_images
 

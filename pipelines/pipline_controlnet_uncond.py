@@ -228,11 +228,11 @@ def generate(
                                                                         controlnet_scale=controlnet_scale[idx+len(control_image)])
 
                     if controlnet_downs == None:
-                        controlnet_downs, controlnet_mids = logit_downs, logit_mids
+                        controlnet_downs = [torch.cat([cur, torch.zeros_like(cur)]) for cur in logit_downs]
+                        controlnet_mids = [torch.cat([cur, torch.zeros_like(cur)]) for cur in logit_mids]
                     else:
                         controlnet_downs = [cur + torch.cat([logit_downs[i], torch.zeros_like(logit_downs[i])]) for i, cur in enumerate(controlnet_downs)]
                         controlnet_mids =  [cur + torch.cat([logit_mids[i], torch.zeros_like(logit_mids[i])]) for i, cur in enumerate(controlnet_mids)] 
-
 
             # 4-2. UNET forward
             if do_cfg:

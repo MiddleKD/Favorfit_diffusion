@@ -42,8 +42,6 @@ def initalize(args):
 
     if torch.cuda.is_available() and ALLOW_CUDA:
         DEVICE = "cuda"
-    elif (torch.has_mps or torch.backends.mps.is_available()) and ALLOW_MPS:
-        DEVICE = "mps"
 
     print(f"Using device: {DEVICE}")
 

@@ -44,6 +44,8 @@ def call_controlnet_model(
         control_state_dict_path = [control_state_dict_path]
     for cur in control_state_dict_path:
         control_state_dict_list.append(torch.load(cur))
+    if not isinstance(apply_global_mean_pooling_per_models, list) and apply_global_mean_pooling_per_models is not None:
+        apply_global_mean_pooling_per_models=[apply_global_mean_pooling_per_models]
     
     controlnet = load_controlnet_model(control_state_dict_list, apply_global_mean_pooling_per_models, **kwargs)
 

@@ -74,7 +74,7 @@ def text_to_image(
         ):
 
     output_images = pipeline_default.generate(
-        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        prompt=prompt,
         uncond_prompt=uncond_prompt,
         input_image=None,
         num_per_image=num_per_image,
@@ -106,7 +106,7 @@ def image_to_image(
         ):
 
     output_images = pipeline_default.generate(
-        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        prompt=prompt,
         uncond_prompt=uncond_prompt,
         input_image=input_image,
         num_per_image=num_per_image,
@@ -140,7 +140,7 @@ def text_to_image_controlnet(
         ):
 
     output_images = pipline_default_controlnet.generate(
-        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        prompt=prompt,
         uncond_prompt=uncond_prompt,
         input_image=None,
         control_image=control_image,
@@ -178,7 +178,7 @@ def image_to_image_controlnet(
         ):
 
     output_images = pipline_default_controlnet.generate(
-        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        prompt=prompt,
         uncond_prompt=uncond_prompt,
         input_image=input_image,
         control_image=control_image,
@@ -217,7 +217,7 @@ def inpainting_controlnet(
         ):
 
     output_images = pipeline_inpainting_controlnet.generate(
-        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        prompt=prompt,
         uncond_prompt=uncond_prompt,
         input_image=input_image,
         mask_image=mask_image,
@@ -254,7 +254,7 @@ def text_to_image_positive_controlnet(
         ):
 
     output_images = pipline_positive_controlnet.generate(
-        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        prompt=prompt,
         uncond_prompt=uncond_prompt,
         input_image=None,
         control_image=control_image,

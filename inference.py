@@ -47,7 +47,7 @@ def call_controlnet_model(
     if not isinstance(apply_global_mean_pooling_per_models, list) and apply_global_mean_pooling_per_models is not None:
         apply_global_mean_pooling_per_models=[apply_global_mean_pooling_per_models]
     
-    controlnet = load_controlnet_model(control_state_dict_list, apply_global_mean_pooling_per_models, **kwargs)
+    controlnet = load_controlnet_model(control_state_dict_list, apply_global_mean_pooling_per_models=apply_global_mean_pooling_per_models, **kwargs)
 
     return controlnet
 

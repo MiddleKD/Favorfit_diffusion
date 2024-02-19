@@ -2,8 +2,8 @@ import os
 from typing import Union, List, Dict
 
 from transformers import CLIPTokenizer
-from pipelines import pipeline_default, pipline_default_controlnet, pipeline_inpainting_controlnet
-from .utils.model_loader import *
+from pipelines import pipeline_default, pipline_default_controlnet, pipeline_inpainting_controlnet, pipline_positive_controlnet
+from utils.model_loader import *
 
 
 # Call model
@@ -74,7 +74,7 @@ def text_to_image(
         ):
 
     output_images = pipeline_default.generate(
-        prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
+        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=None,
         num_per_image=num_per_image,
@@ -106,7 +106,7 @@ def image_to_image(
         ):
 
     output_images = pipeline_default.generate(
-        prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
+        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=input_image,
         num_per_image=num_per_image,
@@ -140,7 +140,7 @@ def text_to_image_controlnet(
         ):
 
     output_images = pipline_default_controlnet.generate(
-        prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
+        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=None,
         control_image=control_image,
@@ -178,7 +178,7 @@ def image_to_image_controlnet(
         ):
 
     output_images = pipline_default_controlnet.generate(
-        prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
+        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=input_image,
         control_image=control_image,
@@ -217,7 +217,7 @@ def inpainting_controlnet(
         ):
 
     output_images = pipeline_inpainting_controlnet.generate(
-        prompt=f"professional photography, natural shadow, {prompt}, realistic, high resolution, 8k",
+        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
         uncond_prompt=uncond_prompt,
         input_image=input_image,
         mask_image=mask_image,
@@ -228,6 +228,42 @@ def inpainting_controlnet(
         sampler_name="ddpm",
         n_inference_steps=20,
         strength=strength,
+        models=models,
+        seeds=seeds,
+        device=device,
+        idle_device="cpu",
+        tokenizer=tokenizer,
+        lora_scale=lora_scale,
+        controlnet_scale=controlnet_scale
+    )
+
+    return output_images
+
+def text_to_image_positive_controlnet(
+        control_image,
+        positive_control_image,
+        prompt,
+        uncond_prompt=default_uncond_prompt,
+        num_per_image=1,
+        lora_scale=0.7,
+        controlnet_scale=[1.0, 1.0],
+        models=None,
+        seeds=[], 
+        device="cpu",
+        tokenizer=None,
+        ):
+
+    output_images = pipline_positive_controlnet.generate(
+        prompt=f"professional photography, natural, {prompt}, realistic, high resolution, 8k",
+        uncond_prompt=uncond_prompt,
+        input_image=None,
+        control_image=control_image,
+        positive_control_image=positive_control_image,
+        num_per_image=num_per_image,
+        do_cfg=True,
+        cfg_scale=7.5,
+        sampler_name="ddpm",
+        n_inference_steps=20,
         models=models,
         seeds=seeds,
         device=device,

@@ -149,9 +149,9 @@ def generate(
         if not isinstance(controlnet_embedding_models, list):
             controlnet_embedding_models = [controlnet_embedding_models]
         if not isinstance(control_image, list) and control_image is not None:
-            control_image = [control_image] * len(controlnet_embedding_models)
+            control_image = [control_image]
         if not isinstance(positive_control_image, list) and positive_control_image is not None:
-            positive_control_image = [positive_control_image] * len(controlnet_embedding_models)
+            positive_control_image = [positive_control_image]
         
         # forward
         if control_image is None:

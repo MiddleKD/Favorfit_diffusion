@@ -35,6 +35,8 @@ def call_tokenizer()-> CLIPTokenizer:
 
 def call_controlnet_model(
         control_state_dict_path: Union[str, List[str], None] = None,
+        apply_global_mean_pooling_per_models: Union[bool, List[bool], None] = None,
+        **kwargs,
 )-> Dict:
     
     control_state_dict_list = []
@@ -43,7 +45,7 @@ def call_controlnet_model(
     for cur in control_state_dict_path:
         control_state_dict_list.append(torch.load(cur))
     
-    controlnet = load_controlnet_model(control_state_dict_list)
+    controlnet = load_controlnet_model(control_state_dict_list, apply_global_mean_pooling_per_models, **kwargs)
 
     return controlnet
 

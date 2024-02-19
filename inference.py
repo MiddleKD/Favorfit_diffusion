@@ -3,7 +3,7 @@ from typing import Union, List, Dict
 
 from transformers import CLIPTokenizer
 from pipelines import pipeline_default, pipline_default_controlnet, pipeline_inpainting_controlnet, pipline_positive_controlnet
-from utils.model_loader import *
+from .utils.model_loader import *
 
 
 # Call model

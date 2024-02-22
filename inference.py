@@ -2,7 +2,7 @@ import os
 from typing import Union, List, Dict
 
 from transformers import CLIPTokenizer
-from pipelines import pipeline_default, pipline_default_controlnet, pipeline_inpainting_controlnet, pipline_positive_controlnet
+from pipelines import pipeline_default, pipline_default_controlnet, pipeline_inpainting_controlnet, pipline_positive_controlnet, pipeline_inpainting_positive_controlnet
 from .utils.model_loader import *
 
 
@@ -70,6 +70,7 @@ def text_to_image(
         prompt,
         uncond_prompt=default_uncond_prompt,
         num_per_image=1,
+        cfg_scale=7.5,
         lora_scale=0.7,
         models=None,
         seeds=[],
@@ -83,7 +84,7 @@ def text_to_image(
         input_image=None,
         num_per_image=num_per_image,
         do_cfg=True,
-        cfg_scale=7.5,
+        cfg_scale=cfg_scale,
         sampler_name="ddpm",
         n_inference_steps=20,
         seeds=seeds,
@@ -102,6 +103,7 @@ def image_to_image(
         prompt,
         uncond_prompt=default_uncond_prompt,
         num_per_image=1,
+        cfg_scale=7.5,
         lora_scale=0.7,
         models=None,
         seeds=[], 
@@ -115,7 +117,7 @@ def image_to_image(
         input_image=input_image,
         num_per_image=num_per_image,
         do_cfg=True,
-        cfg_scale=7.5,
+        cfg_scale=cfg_scale,
         sampler_name="ddpm",
         n_inference_steps=20,
         seeds=seeds,
@@ -134,6 +136,7 @@ def text_to_image_controlnet(
         prompt,
         uncond_prompt=default_uncond_prompt,
         num_per_image=1,
+        cfg_scale=7.5,
         strength=0.8,
         lora_scale=0.7,
         controlnet_scale=1.0,
@@ -150,7 +153,7 @@ def text_to_image_controlnet(
         control_image=control_image,
         num_per_image=num_per_image,
         do_cfg=True,
-        cfg_scale=7.5,
+        cfg_scale=cfg_scale,
         sampler_name="ddpm",
         n_inference_steps=20,
         strength=strength,
@@ -172,6 +175,7 @@ def image_to_image_controlnet(
         prompt,
         uncond_prompt=default_uncond_prompt,
         num_per_image=1,
+        cfg_scale=7.5,
         strength=0.8,
         lora_scale=0.7,
         controlnet_scale=1.0,
@@ -188,7 +192,7 @@ def image_to_image_controlnet(
         control_image=control_image,
         num_per_image=num_per_image,
         do_cfg=True,
-        cfg_scale=7.5,
+        cfg_scale=cfg_scale,
         sampler_name="ddpm",
         n_inference_steps=20,
         strength=strength,
@@ -211,6 +215,7 @@ def inpainting_controlnet(
         prompt,
         uncond_prompt=default_uncond_prompt,
         num_per_image=1,
+        cfg_scale=7.5,
         strength=0.6,
         lora_scale=0.7,
         controlnet_scale=1.0,
@@ -228,7 +233,49 @@ def inpainting_controlnet(
         control_image=control_image,
         num_per_image=num_per_image,
         do_cfg=True,
+        cfg_scale=cfg_scale,
+        sampler_name="ddpm",
+        n_inference_steps=20,
+        strength=strength,
+        models=models,
+        seeds=seeds,
+        device=device,
+        idle_device="cpu",
+        tokenizer=tokenizer,
+        lora_scale=lora_scale,
+        controlnet_scale=controlnet_scale
+    )
+
+    return output_images
+
+def inpainting_positive_controlnet(
+        input_image,
+        mask_image,
+        control_image,
+        positive_control_image,
+        prompt,
+        uncond_prompt=default_uncond_prompt,
+        num_per_image=1,
         cfg_scale=7.5,
+        strength=0.6,
+        lora_scale=0.7,
+        controlnet_scale=1.0,
+        models=None,
+        seeds=[], 
+        device="cpu",
+        tokenizer=None,
+        ):
+
+    output_images = pipeline_inpainting_positive_controlnet.generate(
+        prompt=prompt,
+        uncond_prompt=uncond_prompt,
+        input_image=input_image,
+        mask_image=mask_image,
+        control_image=control_image,
+        positive_control_image=positive_control_image,
+        num_per_image=num_per_image,
+        do_cfg=True,
+        cfg_scale=cfg_scale,
         sampler_name="ddpm",
         n_inference_steps=20,
         strength=strength,
@@ -249,6 +296,7 @@ def text_to_image_positive_controlnet(
         prompt,
         uncond_prompt=default_uncond_prompt,
         num_per_image=1,
+        cfg_scale=7.5,
         lora_scale=0.7,
         controlnet_scale=[1.0, 1.0],
         models=None,
@@ -265,7 +313,7 @@ def text_to_image_positive_controlnet(
         positive_control_image=positive_control_image,
         num_per_image=num_per_image,
         do_cfg=True,
-        cfg_scale=7.5,
+        cfg_scale=cfg_scale,
         sampler_name="ddpm",
         n_inference_steps=20,
         models=models,

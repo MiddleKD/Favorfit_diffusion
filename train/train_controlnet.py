@@ -126,7 +126,7 @@ def make_train_dataset(path, tokenizer, accelerator):
             transforms.Resize(512, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.CenterCrop(512),
             transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
+            # transforms.Normalize([0.5], [0.5]),
         ]
     )
 
@@ -432,13 +432,13 @@ def main(args):
     if args.use_lr_scheduler:
         optimizer = AdamW(
             params_to_optimize,
-            lr=1e-06,
+            lr=5e-06,
             betas=(0.9, 0.999),
             weight_decay=1e-2,
             eps=1e-08,
         )
         from networks.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
-        lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)
+        lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=100, gamma=1)
     else:
         optimizer = AdamW(
                 params_to_optimize,

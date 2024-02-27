@@ -10,30 +10,31 @@ def generate(
     prompt,
     uncond_prompt=None,
     input_image=None,
-    control_image=None,
     num_per_image=1,
+    strength=0.8,
     do_cfg=True,
     cfg_scale=7.5,
     sampler_name="ddpm",
     n_inference_steps=50,
-    strength=0.8,
     models={},
     seeds=None,
     device=None,
-    idle_device="cpu",
+    idle_device=None,
     tokenizer=None,
     leave_tqdm=True,
-    controlnet_scale=1.0,
     **kwargs
-):  
+):
     # make latent shape base on input image
-    ORIGIN_WIDTH, ORIGIN_HEIGHTS, WIDTH, HEIGHT, LATENTS_WIDTH, LATENTS_HEIGHT = prepare_latent_width_height([input_image, control_image])
+    ORIGIN_WIDTH, ORIGIN_HEIGHTS, WIDTH, HEIGHT, LATENTS_WIDTH, LATENTS_HEIGHT = prepare_latent_width_height([input_image])
     latents_shape = (1, 4, LATENTS_HEIGHT, LATENTS_WIDTH)
 
     with torch.no_grad():
 
         # prepare model type
         dtype_map = get_model_weights_dtypes(models_wrapped_dict=models)
+
+        if not 0 < strength <= 1:
+            raise ValueError("strength must be between 0 and 1")
 
         if idle_device:
             to_idle = lambda x: x.to(idle_device)
@@ -44,9 +45,7 @@ def generate(
         # check seeds
         generators = [torch.Generator(device=device) for _ in range(num_per_image)]
         
-        if seeds == -1:
-            seeds = None
-        elif isinstance(seeds,int):
+        if isinstance(seeds,int):
             seeds = [seeds]*num_per_image
         elif len(seeds) != num_per_image: 
             print("length do not match. seeds set to None.")
@@ -98,6 +97,7 @@ def generate(
         to_idle(clip)
 
         
+
         # 2. make latents(forward VAE encoder)
         if input_image:
             encoder = models["encoder"]
@@ -110,7 +110,7 @@ def generate(
             input_image_tensor = rescale(input_image_tensor, (0, 255), (-1, 1))
             input_image_tensor = input_image_tensor.unsqueeze(0)
             input_image_tensor = input_image_tensor.permute(0, 3, 1, 2).to(device)
-
+            
             input_image_tensor = input_image_tensor.repeat_interleave(num_per_image, dim=0)
             
             encoder_noise = torch.cat([torch.randn(latents_shape, 
@@ -138,123 +138,81 @@ def generate(
                                             device=device) 
                                             for generator in generators]
                                 )
+
         
-
-        # 3. controlnet embedding forward
-        # check model is list or one
-        controlnet_embedding_models = models["controlnet_embedding"]
-        control_embedding_latent_list = []
-
-        if not isinstance(controlnet_embedding_models, list):
-            controlnet_embedding_models = [controlnet_embedding_models]
-        if not isinstance(control_image, list): 
-            control_image = [control_image] * len(controlnet_embedding_models)
-        
-        # forward
-        for idx, controlnet_embedding_model in enumerate(controlnet_embedding_models):
-            control_image_tensor = control_image[idx].resize((WIDTH, HEIGHT))
-            control_image_tensor = np.array(control_image_tensor)
-            control_image_tensor = torch.tensor(control_image_tensor)
-
-            if kwargs.get("control_image_scaling_range") is not None:
-                scaling_range = kwargs.get("control_image_scaling_range")
-            else:
-                scaling_range = (0,1)
-            
-            control_image_tensor = rescale(control_image_tensor, (0, 255), scaling_range)
-            control_image_tensor = control_image_tensor.unsqueeze(0)
-            control_image_tensor = control_image_tensor.permute(0, 3, 1, 2).to(device)
-            control_image_tensor = control_image_tensor.repeat_interleave(num_per_image, dim=0)
-
-            controlnet_embedding_model.to(device)
-            control_embedding_latent = controlnet_embedding_model(control_image_tensor.to(dtype=dtype_map["controlnet_embedding"]))
-            control_embedding_latent_list.append(control_embedding_latent)
-            to_idle(controlnet_embedding_model)
-
-
-        # 4. DENOISING LOOP forward
+        # 3. DENOISING LOOP forward
         diffusion = models["diffusion"]
         diffusion.to(device)
 
-        # check model is list or one
-        controlnet_models = models["controlnet"]
-        if not isinstance(controlnet_models, list):
-            controlnet_models = [controlnet_models]
-        if not isinstance(controlnet_scale, list):
-            controlnet_scale = [controlnet_scale] * len(controlnet_models)
-        for controlnet_model in controlnet_models:
-            controlnet_model.to(device)
-
         # LOOP start
-        timesteps = tqdm(sampler.timesteps, leave=leave_tqdm)
+        timesteps = tqdm(sampler.timesteps[:10], leave=leave_tqdm)
         for i, timestep in enumerate(timesteps):
-
+            
             # prepare time step embedding
             time_embedding = get_time_embedding(timestep).to(device)
-            
+
             model_input = latents
-            control_img_input = latents
 
-            # 4-1. controlnet forward
-            control_embedding_input = control_embedding_latent_list
-
-            if do_cfg:
-                control_img_input = control_img_input.repeat(2, 1, 1, 1)
-                control_embedding_input = [cur.repeat(2, 1, 1, 1) for cur in control_embedding_input]
-            
-            controlnet_downs, controlnet_mids = None, None
-            for idx, controlnet_model in enumerate(controlnet_models):
-                logit_downs, logit_mids = controlnet_model(original_sample=control_img_input.to(dtype=dtype_map["controlnet"]), 
-                                                                    latent=control_embedding_input[idx].to(dtype=dtype_map["controlnet"]), 
-                                                                    context=context.to(dtype=dtype_map["controlnet"]), 
-                                                                    time=time_embedding.to(dtype=dtype_map["controlnet"]),
-                                                                    controlnet_scale=controlnet_scale[idx])
-                if idx == 0:
-                    controlnet_downs, controlnet_mids = logit_downs, logit_mids
-                else:
-                    controlnet_downs = [cur + logit_downs[i] for i, cur in enumerate(controlnet_downs)] 
-                    controlnet_mids = [cur + logit_mids[i] for i, cur in enumerate(controlnet_mids)] 
-
-            # 4-2. UNET forward
+            # 3-1. UNET forward
             if do_cfg:
                 model_input = model_input.repeat(2, 1, 1, 1)
             
             model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]),
-                                    context.to(dtype=dtype_map["diffusion"]),
-                                    time_embedding.to(dtype=dtype_map["diffusion"]),
-                                    additional_res_condition=[
-                                        [cur.to(dtype=dtype_map["diffusion"]) for cur in controlnet_downs], 
-                                        [cur.to(dtype=dtype_map["diffusion"]) for cur in controlnet_mids]
-                                    ],
-                                    **kwargs
+                                     context.to(dtype=dtype_map["diffusion"]), 
+                                     time_embedding.to(dtype=dtype_map["diffusion"]),
+                                     **kwargs
             )
 
             if do_cfg:
                 output_cond, output_uncond = model_output.chunk(2)
                 model_output = cfg_scale * (output_cond - output_uncond) + output_uncond
+
+            # 3-2. scheduler step
+            latents = sampler.step(timestep, latents, model_output)
+
+        # REFINER LOOP
+        timesteps = tqdm(sampler.timesteps[10:], leave=leave_tqdm)
+        for i, timestep in enumerate(timesteps):
             
-            # 4-3. scheduler step
+            # prepare time step embedding
+            time_embedding = get_time_embedding(timestep).to(device)
+
+            model_input = latents
+
+            # 3-1. UNET forward
+            if do_cfg:
+                model_input = model_input.repeat(2, 1, 1, 1)
+            
+            model_output = diffusion(model_input.to(dtype=dtype_map["diffusion"]),
+                                     context.to(dtype=dtype_map["diffusion"]), 
+                                     time_embedding.to(dtype=dtype_map["diffusion"]),
+                                     **kwargs
+            )
+
+            if do_cfg:
+                output_cond, output_uncond = model_output.chunk(2)
+                model_output = cfg_scale * (output_cond - output_uncond) + output_uncond
+
+            # 3-2. scheduler step
             latents = sampler.step(timestep, latents, model_output)
 
         to_idle(diffusion)
-        for controlnet_model in controlnet_models:
-            to_idle(controlnet_model)
-        
-        # LOOP end
-        
 
-        # 5. VAE decoder forward
+        # LOOP end
+
+
+        # 4. VAE decoder forward
         decoder = models["decoder"]
         decoder.to(device)
-
+        
         images = decoder(latents.to(dtype=dtype_map["decoder"]))
-
+        
         to_idle(decoder)
 
 
-        # 6. prepare outputs
+        # 5. prepare outputs
         images = rescale(images, (-1, 1), (0, 255), clamp=True)
         images = images.permute(0, 2, 3, 1)
         images = images.to("cpu", torch.uint8).numpy()
-
+        
         return [Image.fromarray(image).resize([ORIGIN_WIDTH, ORIGIN_HEIGHTS]) for image in images]

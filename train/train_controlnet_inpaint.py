@@ -50,6 +50,12 @@ def parse_args():
         nargs="+",
     )
     parser.add_argument(
+        "--validation_masks",
+        type=str,
+        default=None,
+        nargs="+",
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=3,
@@ -123,7 +129,7 @@ def make_train_dataset(path, tokenizer, accelerator):
         ]
     )
 
-    conditioning_image_transforms = transforms.Compose(
+    mask_transforms = transforms.Compose(
         [
             transforms.Resize(512, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.CenterCrop(512),
@@ -132,7 +138,7 @@ def make_train_dataset(path, tokenizer, accelerator):
         ]
     )
 
-    mask_transforms = transforms.Compose(
+    mask_latents_transforms = transforms.Compose(
         [
             transforms.Resize(64, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.CenterCrop(64),
@@ -144,17 +150,18 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
-        conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
+        masks_pil_list = [mask.convert("L") for mask in examples[mask_column]]
+        masks = [mask_transforms(mask) for mask in masks_pil_list]
+        masks_latent = [mask_latents_transforms(mask) for mask in masks_pil_list]
 
-        masks = [Image.fromarray(255 - np.array(mask.convert("L"))) for mask in examples[mask_column]]
-        masks = [mask_transforms(mask) for mask in masks]
+        black_image = torch.zeros_like(images[0]) - 1
+        conditioning_images = [torch.cat([black_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(0.0)) for cur in masks])]
 
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77, truncation=True).input_ids
        
         examples["pixel_values"] = images
         examples["conditioning_pixel_values"] = conditioning_images
-        examples["masks"] = masks
+        examples["masks"] = masks_latent
         examples["input_ids"] = tokenized_ids
 
         return examples
@@ -191,7 +198,7 @@ def load_models(args):
         if "controlnet" not in control_state_dict.keys():
             from utils.model_converter import convert_controlnet_model
             control_state_dict = convert_controlnet_model(control_state_dict)
-    controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32, **{"global_mean_pooling":args.global_mean_pooling})
+    controlnet = load_controlnet_model(control_state_dict, dtype=torch.float32, is_inpaint_contorlnet=True, **{"global_mean_pooling":args.global_mean_pooling})
     models.update(controlnet)
 
     if args.resume_ckpt_path is not None:
@@ -201,7 +208,6 @@ def load_models(args):
 
 import wandb
 from pipelines.pipline_default_controlnet import generate
-# from pipelines.pipline_controlnet_uncond import generate
 from PIL import Image
 def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, embedding, accelerator, args):
 
@@ -217,54 +223,40 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
     models['controlnet_embedding'] = [embedding]
 
     image_logs = []
-    for validation_prompt, validation_image in zip(args.validation_prompts, args.validation_images):
+    for validation_prompt, validation_image, validation_mask in zip(args.validation_prompts, args.validation_images, args.validation_masks):
         validation_image = Image.open(validation_image).convert("RGB")
+        validation_mask = Image.open(validation_mask).convert("L")
         
-        # output_images = generate(
-        #     prompt=validation_prompt,
-        #     uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
-        #     input_image=None,
-        #     control_image=None,
-        #     positive_control_image=[validation_image],
-        #     num_per_image=3,
-        #     do_cfg=True,
-        #     cfg_scale=7.5,
-        #     sampler_name="ddpm",
-        #     n_inference_steps=20,
-        #     strength=0.99,
-        #     models=models,
-        #     seeds=[12345, 42, 110],
-        #     device=accelerator.device,
-        #     idle_device="cuda",
-        #     tokenizer=tokenizer,
-        #     lora_scale=0.7,
-        #     controlnet_scale=1.0
-        # )
-        
+        image_np = np.array(validation_image)
+        mask_np = np.array(validation_mask)
+
+        combined_np = np.concatenate([image_np, np.expand_dims(mask_np, axis=-1)], axis=-1)
+        combined_image = Image.fromarray(combined_np.astype(np.uint8))
+
         output_images = generate(
             prompt=validation_prompt,
             uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
             input_image=None,
-            control_image=validation_image,
+            control_image=combined_image,
             num_per_image=3,
             do_cfg=True,
             cfg_scale=7.5,
             sampler_name="ddpm",
             n_inference_steps=20,
-            strength=0.9,
             models=models,
             seeds=[12345, 42, 110],
             device=accelerator.device,
             idle_device="cuda",
             tokenizer=tokenizer,
-            leave_tqdm=False
+            leave_tqdm=False,
+            control_image_scaling_range=(-1,1)
         )
 
         images = output_images
 
         for image in images:
             image_logs.append(
-                {"validation_image": validation_image, "images": image, "validation_prompt": validation_prompt}
+                {"images": image, "validation_prompts": validation_prompt, "validation_images": validation_image, "validation_masks": validation_mask}
             )
 
     for tracker in accelerator.trackers:
@@ -273,15 +265,17 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
 
             for log in image_logs:
                 image = log["images"]
-                validation_prompt = log["validation_prompt"]
-                validation_image = log["validation_image"]
-
-                formatted_images.append(wandb.Image(validation_image, caption="Controlnet conditioning"))
-                formatted_images.append(wandb.Image(image, caption=validation_prompt))
+                validation_prompt = log["validation_prompts"]
+                validation_image = log["validation_images"]
+                validation_mask = log["validation_masks"]
+                formatted_images.append(wandb.Image(validation_image, caption=validation_prompt))
+                formatted_images.append(wandb.Image(validation_mask, caption="mask"))
+                formatted_images.append(wandb.Image(image, caption="result"))
 
             tracker.log({"validation": formatted_images})
 
     return image_logs
+
 
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
@@ -331,6 +325,8 @@ def train_controlnet(accelerator,
     for epoch in range(args.epochs):
         for step, batch in enumerate(train_dataloader):
             latents = encoder(batch["pixel_values"].to(dtype=weight_dtype))
+            control_latents = embedding(batch["conditioning_pixel_values"].to(next(embedding.parameters()).dtype))
+            mask_latents = batch["masks"].to(dtype=weight_dtype)
 
             noise = torch.randn_like(latents)
             batch_size = batch['pixel_values'].shape[0]
@@ -340,9 +336,6 @@ def train_controlnet(accelerator,
             latents = sampler.add_noise(latents, timesteps, noise)
             
             contexts = clip(batch['input_ids'])
-            
-            control_image = batch["conditioning_pixel_values"].to(latents.device)
-            control_latents = embedding(control_image).to(dtype=weight_dtype)
 
             time_embeddings = get_time_embedding(timesteps).to(latents.device)
 
@@ -366,7 +359,8 @@ def train_controlnet(accelerator,
             target = noise
 
             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-            
+            loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
+
             accelerator.backward(loss)
             if accelerator.sync_gradients:
                 params_to_clip = list(controlnet.parameters()) + list(embedding.parameters())
@@ -389,8 +383,6 @@ def train_controlnet(accelerator,
                         embedding = accelerator.unwrap_model(embedding)
                         torch.save(controlnet.state_dict(), os.path.join(save_path, f"controlnet_{epoch}.pth"))
                         torch.save(embedding.state_dict(), os.path.join(save_path, f"embedding_{epoch}.pth"))
-
-                        # accelerator.save_state(save_path)
 
                     if global_step % args.validation_step == 0:
                         log_validation(encoder,

@@ -1,6 +1,7 @@
 import json
 import torch
 import numpy as np
+from PIL import Image
 from typing import Union
 
 def prepare_latent_width_height(pil_image_list=None, explicitly_define_size:Union[list, None]=None, vae_scale=8):
@@ -46,7 +47,10 @@ def check_prompt_text_length(prompt_list, max_length=77):
             truncated_prompt_list.append(prompt)
     return truncated_prompt_list
 
-def rescale(x, old_range, new_range, clamp=False):
+def rescale(x, old_range, new_range, clamp=False, out_type="pt"):
+    if not isinstance(x, torch.Tensor):
+        x = torch.Tensor(x)
+    
     x = x.to(dtype=torch.float16)
 
     old_min, old_max = old_range
@@ -56,6 +60,9 @@ def rescale(x, old_range, new_range, clamp=False):
     x += new_min
     if clamp:
         x = x.clamp(new_min, new_max)
+
+    if out_type == "np":
+        x = np.array(x)
     return x
 
 def get_time_embedding(timestep, dtype=torch.float16):
@@ -121,3 +128,16 @@ def load_colot_list_data(path="./data/list_of_colors.jsonl"):
             color_list[line["color_number"]] = line["color_rgb"]
     color_list = [cur[1] for cur in sorted(color_list.items(), key=lambda x:x[0])]
     return color_list
+
+def composing_image(img1, img2, mask, out_type="pil"):
+    img1 = np.array(img1)
+    mask = np.array(mask)
+    img2 = np.array(img2)
+    
+    composed_output = img1 * (1-rescale(mask, (np.min(mask), np.max(mask)), (0,1), out_type="np")) + \
+        img2 * rescale(mask, (np.min(mask), np.max(mask)), (0,1), out_type="np")
+    
+    if out_type == "pil":
+        composed_output = Image.fromarray(composed_output.astype(np.uint8))
+    
+    return composed_output

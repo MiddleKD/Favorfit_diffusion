@@ -6,3 +6,4 @@ accelerate
 datasets
 matplotlib
 opencv-python
+wandb

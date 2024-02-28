@@ -56,6 +56,12 @@ def parse_args():
         nargs="+",
     )
     parser.add_argument(
+        "--validation_control_images",
+        type=str,
+        default=None,
+        nargs="+",
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=3,
@@ -224,26 +230,34 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
 
     image_logs = []
     for validation_prompt, validation_image, validation_mask in zip(args.validation_prompts, args.validation_images, args.validation_masks):
+        # 이미지와 마스크 로드
         validation_image = Image.open(validation_image).convert("RGB")
-        validation_mask = Image.fromarray(255 - np.array(Image.open(validation_mask).convert("L")))
-        
+        validation_mask = Image.open(validation_mask).convert("RGB")
+
+        # 이미지와 마스크를 numpy 배열로 변환
         image_np = np.array(validation_image)
         mask_np = np.array(validation_mask)
 
-        combined_np = np.concatenate([image_np, np.expand_dims(mask_np, axis=-1)], axis=-1)
-        combined_image = Image.fromarray(combined_np.astype(np.uint8))
+        # 이미지와 마스크를 이용하여 객체 이미지 생성
+        object_image_np = (image_np * (mask_np/255)) + (np.zeros_like(image_np) * (1 - mask_np/255))
+        object_image = Image.fromarray(object_image_np.astype(np.uint8))
+
+        # 객체 이미지와 마스크를 합쳐서 control 이미지 생성
+        control_np = np.concatenate([object_image_np, 255 - mask_np[:,:,0][:,:,None]], axis=-1)
+        control_image = Image.fromarray(control_np.astype(np.uint8))
 
         output_images = generate(
             prompt=validation_prompt,
             uncond_prompt="low quality, worst quality, wrinkled, deformed, distorted, jpeg artifacts,nsfw, paintings, sketches, text, watermark, username, spikey",
-            input_image=None,
-            control_image=combined_image,
+            input_image=validation_image,
+            control_image=control_image,
             num_per_image=3,
             do_cfg=True,
-            cfg_scale=7.5,
+            cfg_scale=12.5,
             sampler_name="ddpm",
             n_inference_steps=20,
             models=models,
+            strength=1.0,
             seeds=[12345, 42, 110],
             device=accelerator.device,
             idle_device="cuda",
@@ -256,7 +270,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
 
         for image in images:
             image_logs.append(
-                {"images": image, "validation_prompts": validation_prompt, "validation_images": validation_image, "validation_masks": validation_mask}
+                {"images": image, "validation_prompts": validation_prompt, "validation_images": validation_image, "validation_control": object_image}
             )
 
     for tracker in accelerator.trackers:
@@ -267,9 +281,9 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
                 image = log["images"]
                 validation_prompt = log["validation_prompts"]
                 validation_image = log["validation_images"]
-                validation_mask = log["validation_masks"]
+                validation_control = log["validation_control"]
                 formatted_images.append(wandb.Image(validation_image, caption=validation_prompt))
-                formatted_images.append(wandb.Image(validation_mask, caption="mask"))
+                formatted_images.append(wandb.Image(validation_control, caption="object"))
                 formatted_images.append(wandb.Image(image, caption="result"))
 
             tracker.log({"validation": formatted_images})

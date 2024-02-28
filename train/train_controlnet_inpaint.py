@@ -151,11 +151,11 @@ def make_train_dataset(path, tokenizer, accelerator):
         images = [image_transforms(image) for image in images]
 
         masks_pil_list = [mask.convert("L") for mask in examples[mask_column]]
-        masks = [mask_transforms(mask) for mask in masks_pil_list]
+        masks = [mask_transforms(Image.fromarray(255-np.array(mask))) for mask in masks_pil_list]
         masks_latent = [mask_latents_transforms(mask) for mask in masks_pil_list]
 
         black_image = torch.zeros_like(images[0]) - 1
-        conditioning_images = [torch.cat([black_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(0.0)) for cur in masks])]
+        conditioning_images = [torch.cat([black_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(-1.0)) for cur in masks])]
 
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77, truncation=True).input_ids
        
@@ -225,7 +225,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
     image_logs = []
     for validation_prompt, validation_image, validation_mask in zip(args.validation_prompts, args.validation_images, args.validation_masks):
         validation_image = Image.open(validation_image).convert("RGB")
-        validation_mask = Image.open(validation_mask).convert("L")
+        validation_mask = Image.fromarray(255 - np.array(Image.open(validation_mask).convert("L")))
         
         image_np = np.array(validation_image)
         mask_np = np.array(validation_mask)
@@ -358,7 +358,7 @@ def train_controlnet(accelerator,
 
             target = noise
 
-            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
             loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
 
             accelerator.backward(loss)
@@ -466,13 +466,13 @@ def main(args):
     if args.use_lr_scheduler:
         optimizer = AdamW(
             params_to_optimize,
-            lr=1e-06,
+            lr=5e-06,
             betas=(0.9, 0.999),
             weight_decay=1e-2,
             eps=1e-08,
         )
         from networks.lr_scheduler.cosine_base import CosineAnnealingWarmUpRestarts
-        lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=20, gamma=1)
+        lr_scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=10000, T_mult=1, eta_max=args.lr,  T_up=100, gamma=1)
     else:
         optimizer = AdamW(
                 params_to_optimize,

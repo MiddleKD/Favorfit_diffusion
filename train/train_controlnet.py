@@ -346,7 +346,7 @@ def train_controlnet(accelerator,
                         controlnet = accelerator.unwrap_model(controlnet)
                         embedding = accelerator.unwrap_model(embedding)
                         torch.save(controlnet.state_dict(), os.path.join(save_path, f"controlnet_{epoch}.pth"))
-                        torch.save(embedding.state_dict(), os.path.join(save_path, f"embedding_{epoch}.pth"))
+                        torch.save(embedding.state_dict(), os.path.join(save_path, f"controlnet_embedding_{epoch}.pth"))
 
                         # accelerator.save_state(save_path)
 
@@ -370,7 +370,7 @@ def train_controlnet(accelerator,
             controlnet = accelerator.unwrap_model(controlnet)
             embedding = accelerator.unwrap_model(embedding)
             torch.save(controlnet.state_dict(), f"./training/controlnet_{epoch}.pth")
-            torch.save(embedding.state_dict(), f"./training/embedding_{epoch}.pth")
+            torch.save(embedding.state_dict(), f"./training/controlnet_embedding_{epoch}.pth")
 
 def main(args):
     cur_dir = os.path.dirname(os.path.abspath(__name__))

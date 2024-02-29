@@ -239,7 +239,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
         mask_np = np.array(validation_mask)
 
         # 이미지와 마스크를 이용하여 객체 이미지 생성
-        object_image_np = (image_np * (mask_np/255)) + (np.zeros_like(image_np) * (1 - mask_np/255))
+        object_image_np = (image_np * (mask_np/255)) + (np.ones_like(image_np)*127 * (1 - mask_np/255))
         object_image = Image.fromarray(object_image_np.astype(np.uint8))
 
         # 객체 이미지와 마스크를 합쳐서 control 이미지 생성
@@ -372,8 +372,8 @@ def train_controlnet(accelerator,
 
             target = noise
 
-            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
-            loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+            # loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
 
             accelerator.backward(loss)
             if accelerator.sync_gradients:
@@ -396,7 +396,7 @@ def train_controlnet(accelerator,
                         controlnet = accelerator.unwrap_model(controlnet)
                         embedding = accelerator.unwrap_model(embedding)
                         torch.save(controlnet.state_dict(), os.path.join(save_path, f"controlnet_{epoch}.pth"))
-                        torch.save(embedding.state_dict(), os.path.join(save_path, f"embedding_{epoch}.pth"))
+                        torch.save(embedding.state_dict(), os.path.join(save_path, f"controlnet_embedding_{epoch}.pth"))
 
                     if global_step % args.validation_step == 0:
                         log_validation(encoder,
@@ -418,7 +418,7 @@ def train_controlnet(accelerator,
             controlnet = accelerator.unwrap_model(controlnet)
             embedding = accelerator.unwrap_model(embedding)
             torch.save(controlnet.state_dict(), f"./training/controlnet_{epoch}.pth")
-            torch.save(embedding.state_dict(), f"./training/embedding_{epoch}.pth")
+            torch.save(embedding.state_dict(), f"./training/controlnet_embedding_{epoch}.pth")
 
 def main(args):
     cur_dir = os.path.dirname(os.path.abspath(__name__))

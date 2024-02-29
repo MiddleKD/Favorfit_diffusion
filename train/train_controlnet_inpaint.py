@@ -160,8 +160,8 @@ def make_train_dataset(path, tokenizer, accelerator):
         masks = [mask_transforms(Image.fromarray(255-np.array(mask))) for mask in masks_pil_list]
         masks_latent = [mask_latents_transforms(mask) for mask in masks_pil_list]
 
-        black_image = torch.zeros_like(images[0]) - 1
-        conditioning_images = [torch.cat([black_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(-1.0)) for cur in masks])]
+        gray_image = torch.zeros_like(images[0])
+        conditioning_images = [torch.cat([gray_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(-1.0)) for cur in masks])]
 
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77, truncation=True).input_ids
        

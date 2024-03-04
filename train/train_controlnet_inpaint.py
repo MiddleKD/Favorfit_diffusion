@@ -160,8 +160,8 @@ def make_train_dataset(path, tokenizer, accelerator):
         masks = [mask_transforms(Image.fromarray(255-np.array(mask))) for mask in masks_pil_list]
         masks_latent = [mask_latents_transforms(mask) for mask in masks_pil_list]
 
-        gray_image = torch.zeros_like(images[0])
-        conditioning_images = [torch.cat([gray_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(-1.0)) for cur in masks])]
+        black_image = torch.zeros_like(images[0]) -1
+        conditioning_images = [torch.cat([black_image * (mask) + image * (1-mask), mask]) for image, mask in zip(images, [torch.where(cur > 0, torch.tensor(1.0), torch.tensor(-1.0)) for cur in masks])]
 
         tokenized_ids = tokenizer.batch_encode_plus(examples[caption_column], padding="max_length", max_length=77, truncation=True).input_ids
        
@@ -239,7 +239,7 @@ def log_validation(encoder, decoder, clip, tokenizer, diffusion, controlnet, emb
         mask_np = np.array(validation_mask)
 
         # 이미지와 마스크를 이용하여 객체 이미지 생성
-        object_image_np = (image_np * (mask_np/255)) + (np.ones_like(image_np)*127 * (1 - mask_np/255))
+        object_image_np = (image_np * (mask_np/255)) + (np.zeros_like(image_np) * (1 - mask_np/255))
         object_image = Image.fromarray(object_image_np.astype(np.uint8))
 
         # 객체 이미지와 마스크를 합쳐서 control 이미지 생성

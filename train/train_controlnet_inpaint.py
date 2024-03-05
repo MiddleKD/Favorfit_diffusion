@@ -372,8 +372,8 @@ def train_controlnet(accelerator,
 
             target = noise
 
-            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-            # loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+            loss = ((loss * mask_latents).sum([1, 2, 3]) / mask_latents.sum([1, 2, 3])).mean()
 
             accelerator.backward(loss)
             if accelerator.sync_gradients:
